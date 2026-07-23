@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-07-23T19:37:22.244Z",
+  "baseUrl": "https://v-core-saas.pages.dev",
+  "health": {
+    "status": "ok",
+    "storage": "d1",
+    "authenticated": true,
+    "generatedAt": "2026-07-23T19:37:22.402Z"
+  },
+  "session": {
+    "user": {
+      "email": "owner@v-core.local",
+      "name": "Owner",
+      "provider": "demo",
+      "role": "owner"
+    },
+    "workspace": {
+      "id": "ws-core",
+      "name": "V-Core Product Lab",
+      "plan": "Enterprise"
+    }
+  },
+  "storage": "d1",
+  "tasksBefore": 6,
+  "createdTaskId": "vc-api-proof",
+  "patchedStatus": "done"
+}

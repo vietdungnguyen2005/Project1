@@ -1,0 +1,19 @@
+{
+  "provider": "cloudflare-pages",
+  "projectName": "v-core-saas",
+  "environment": "Production",
+  "branch": "main",
+  "publicUrl": "https://v-core-saas.pages.dev",
+  "deploymentUrl": "https://3b57f03d.v-core-saas.pages.dev",
+  "deploymentId": "3b57f03d-f487-4743-af12-8bb7c4c90110",
+  "status": "deployed",
+  "productionSmoke": "passed",
+  "apiProof": "passed",
+  "lighthouse": {
+    "url": "https://v-core-saas.pages.dev",
+    "performance": 100,
+    "accessibility": 100,
+    "bestPractices": 100,
+    "seo": 100
+  }
+}
