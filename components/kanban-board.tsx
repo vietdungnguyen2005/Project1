@@ -338,7 +338,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 8 }}
+      initial={false}
       animate={{ opacity: isDragging ? 0.55 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.18 }}
