@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm install
       - run: npm run verify
       - run: npx wrangler pages deploy out --project-name v-core-saas --branch main
         env:
