@@ -1,0 +1,8 @@
+name = "v-core-saas"
+pages_build_output_dir = "out"
+compatibility_date = "2026-07-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "v-core-saas-db"
+database_id = "31b7db35-3d23-4c60-9ddf-227c41cbc878"

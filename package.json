@@ -1,0 +1,53 @@
+{
+  "name": "v-core-saas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "build:cloudflare": "next build",
+    "start": "serve out -l 3010",
+    "preview": "serve out -l 3010",
+    "deploy:cloudflare": "wrangler pages deploy out --project-name v-core-saas",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "npm run build && playwright test",
+    "proof:performance": "tsx scripts/prove-performance.ts",
+    "proof:api": "tsx scripts/prove-api.ts",
+    "proof:lighthouse": "tsx scripts/run-lighthouse.ts",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run proof:performance && npm run e2e"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-query-devtools": "^5.101.4",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.26.0",
+    "next": "^16.2.11",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.2",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.11",
+    "jsdom": "^29.1.1",
+    "lighthouse": "^13.4.1",
+    "serve": "^14.2.6",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.114.0"
+  },
+  "overrides": {
+    "postcss": "8.5.12",
+    "sharp": "0.35.0"
+  }
+}

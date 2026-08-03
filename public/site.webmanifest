@@ -1,0 +1,21 @@
+{
+  "name": "V-Core SaaS",
+  "short_name": "V-Core",
+  "description": "High-performance agile project management and collaboration platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090b10",
+  "theme_color": "#13b5a6",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml"
+    }
+  ]
+}

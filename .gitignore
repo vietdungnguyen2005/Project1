@@ -1,0 +1,16 @@
+.next
+node_modules
+out
+build
+dist
+.wrangler
+test-results
+playwright-report
+reports/*.png
+.env*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
