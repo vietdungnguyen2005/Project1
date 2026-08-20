@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-08-20T12:50:01.971Z",
+  "generatedAt": "2026-08-20T13:41:47.750Z",
   "taskCount": 10000,
   "budgetMs": 50,
-  "titleUpdateMs": 0.95,
-  "statusUpdateMs": 1.05,
-  "filterAndGroupMs": 4.14,
+  "titleUpdateMs": 1.15,
+  "statusUpdateMs": 0.29,
+  "filterAndGroupMs": 5.51,
   "cleanup": {
     "abortController": true,
     "listenerRemoved": true,
