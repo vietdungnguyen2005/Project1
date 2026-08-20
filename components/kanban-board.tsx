@@ -17,6 +17,7 @@ import type { Task, TaskDraft, TaskPriority, TaskStatus } from "@/lib/types";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { useTaskCloudSync } from "@/hooks/use-task-cloud-sync";
 import { useTaskStore } from "@/store/task-store";
+import { formatTaskTimestamp } from "@/lib/date-time";
 
 const priorityStyles: Record<TaskPriority, string> = {
   critical: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200",
@@ -324,6 +325,8 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
   const isMutationPending = useTaskStore((state) => state.pendingTaskIds.includes(task.id));
   const [title, setTitle] = useState(task.title);
   const [isEditing, setIsEditing] = useState(false);
+  const timestampLabel = formatTaskTimestamp(task.updatedAt);
+  const hasAbsoluteTimestamp = !Number.isNaN(Date.parse(task.updatedAt));
   const debouncedSave = useDebouncedCallback((nextTitle: string) => {
     updateTaskTitle(task.id, nextTitle);
   }, 180);
@@ -417,7 +420,11 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
 
           <footer className="mt-4 flex items-center justify-between text-xs font-semibold text-ink-soft">
             <span>{task.owner}</span>
-            <span>{task.points} pts / {task.updatedAt}</span>
+            <span className="text-right tabular-nums">
+              {task.points} pts / {hasAbsoluteTimestamp
+                ? <time dateTime={task.updatedAt} title={task.updatedAt}>{timestampLabel}</time>
+                : <span>{timestampLabel}</span>}
+            </span>
           </footer>
         </div>
       </div>

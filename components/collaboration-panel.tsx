@@ -62,8 +62,8 @@ export function CollaborationPanel() {
           <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-accent-strong">Collaboration / 02</p>
           <h2 id="collaboration-title" className="mt-1 text-xl font-black">Task Handoff</h2>
         </div>
-        <label className="text-xs font-bold text-ink-soft">Active task
-          <select value={effectiveTaskId} onChange={(event) => setTaskId(event.target.value)} className="focus-ring mt-1 block h-10 min-w-64 rounded border border-line bg-panel-muted px-3 text-sm font-bold text-foreground">
+        <label className="min-w-0 w-full text-xs font-bold text-ink-soft sm:w-auto">Active task
+          <select value={effectiveTaskId} onChange={(event) => setTaskId(event.target.value)} className="focus-ring mt-1 block h-10 w-full min-w-0 max-w-full rounded border border-line bg-panel-muted px-3 text-sm font-bold text-foreground sm:min-w-64">
             {tasks.map((task) => <option key={task.id} value={task.id}>{task.key} — {task.title}</option>)}
           </select>
         </label>

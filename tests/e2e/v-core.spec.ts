@@ -144,3 +144,43 @@ test("owners can operate the workspace and inspect recruiter-facing evidence", a
   await expect(page.getByRole("heading", { name: "Claims you can rerun." })).toBeVisible();
   await expect(page.getByRole("link", { name: /Open CI runs/ })).toHaveAttribute("href", /github\.com/);
 });
+
+test("long active task titles do not widen the mobile viewport", async ({ page }) => {
+  const longTitle = "Coordinate the cross-functional production readiness handoff without clipping narrow mobile screens";
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/session") {
+      return route.fulfill({
+        json: {
+          user: { id: "user-id", email: "owner@v-core.local", name: "Dung Nguyen" },
+          workspaces: [{ id: "workspace-id", name: "V-Core", slug: "v-core", role: "OWNER" }]
+        }
+      });
+    }
+    if (request.method() === "GET" && url.pathname.endsWith("/tasks")) {
+      return route.fulfill({
+        json: {
+          items: [{
+            id: "task-id", key: "VC-999", title: longTitle, owner: "Dung Nguyen", status: "backlog",
+            priority: "high", points: 5, tags: ["handoff"], columnId: "column-id", position: 1000,
+            version: 0, updatedAt: "2026-08-20T13:01:32.554760Z"
+          }],
+          truncated: false
+        }
+      });
+    }
+    if (url.pathname.endsWith("/overview")) return route.fulfill({ json: { projects: [], members: [], invitations: [] } });
+    if (url.pathname.endsWith("/activities") || url.pathname.endsWith("/comments")) return route.fulfill({ json: { items: [] } });
+    if (url.pathname.endsWith("/events")) return route.fulfill({ status: 204 });
+    return route.fulfill({ status: 404 });
+  });
+
+  await page.goto("/");
+  await expect(page.getByLabel("Active task")).toContainText("VC-999");
+  const dimensions = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth
+  }));
+  expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
+});
