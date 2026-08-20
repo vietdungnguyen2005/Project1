@@ -2,6 +2,14 @@
 
 V-Core is a portfolio-grade agile delivery workspace built to demonstrate backend and cloud engineering, not only UI implementation. A statically exported Next.js client runs on Cloudflare Pages, a thin Worker acts as a trusted backend-for-frontend (BFF), and a Java 21 Spring Boot modular monolith owns business data in PostgreSQL with Redis as a disposable cache.
 
+## Live demo
+
+- Application: [v-core-saas.pages.dev](https://v-core-saas.pages.dev)
+- Backend readiness: [v-core-api.onrender.com/actuator/health/readiness](https://v-core-api.onrender.com/actuator/health/readiness)
+- Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
+
+The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
+
 ## What this repository proves
 
 - Correct concurrent Kanban moves with PostgreSQL row locking, WIP limits, and optimistic versions.
@@ -91,7 +99,7 @@ The long-lived free demo is split by runtime, not by repository:
 2. A container platform hosts the Spring Boot image.
 3. Neon provides PostgreSQL and Upstash provides Redis.
 
-The Cloudflare deploy workflow is manual until `BACKEND_ORIGIN` and matching BFF secrets are configured. This prevents an incomplete backend migration from breaking the existing public demo. AWS/Terraform deployment evidence can be added later without duplicating application code or creating a second project.
+The live demo currently uses this split with `BACKEND_ORIGIN` and matching BFF secrets configured in provider secret stores. AWS/Terraform deployment evidence can be added later without duplicating application code or creating a second project.
 
 ## Repository map
 
