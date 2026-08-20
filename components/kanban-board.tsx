@@ -4,8 +4,8 @@ import {
   memo,
   useDeferredValue,
   useMemo,
+  useRef,
   useState,
-  useTransition,
   type FormEvent,
   type ReactNode
 } from "react";
@@ -38,10 +38,10 @@ export function KanbanBoard() {
   const lastInteractionMs = useTaskStore((state) => state.lastInteractionMs);
   const syncState = useTaskStore((state) => state.syncState);
   const lastSyncError = useTaskStore((state) => state.lastSyncError);
+  const query = useTaskStore((state) => state.query);
+  const setQuery = useTaskStore((state) => state.setQuery);
   const cloudSync = useTaskCloudSync();
-  const [isPending, startTransition] = useTransition();
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
@@ -62,9 +62,7 @@ export function KanbanBoard() {
     const taskId = draggingId;
     setDraggingId(null);
 
-    startTransition(() => {
-      moveTask(taskId, status);
-    });
+    moveTask(taskId, status);
   };
 
   return (
@@ -90,7 +88,7 @@ export function KanbanBoard() {
             className="rounded border border-line bg-panel-muted px-3 py-2 font-mono text-xs font-bold text-ink-soft"
             aria-live="polite"
           >
-            INP sim {lastInteractionMs}ms {isPending ? "syncing" : "idle"}
+            INP sim {lastInteractionMs}ms {syncState === "syncing" ? "syncing" : "idle"}
           </div>
           <div
             className="rounded border border-line bg-panel-muted px-3 py-2 text-xs font-black text-ink-soft"
@@ -100,7 +98,7 @@ export function KanbanBoard() {
             {cloudSync.isSyncing || syncState === "syncing"
               ? "Cloud syncing"
               : syncState === "cloud"
-                ? "D1 synced"
+                ? "Postgres synced"
                 : syncState === "offline"
                   ? "Local fallback"
                   : "Local cache"}
@@ -119,13 +117,13 @@ export function KanbanBoard() {
       <AnimatePresence initial={false}>
         {isCreating ? (
           <TaskComposer
-            startTransition={startTransition}
+            ownerName={cloudSync.session?.user.name ?? "Demo Owner"}
             onDone={() => setIsCreating(false)}
           />
         ) : null}
       </AnimatePresence>
 
-      <div className="grid gap-3 pt-3 md:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid gap-3 pt-3 md:grid-cols-2 xl:grid-cols-4">
         {columns.map((column) => (
           <KanbanColumn
             key={column.id}
@@ -144,36 +142,41 @@ export function KanbanBoard() {
 }
 
 type TaskComposerProps = {
-  startTransition: (callback: () => void) => void;
+  ownerName: string;
   onDone: () => void;
 };
 
-const emptyDraft: TaskDraft = {
+const createEmptyDraft = (ownerName: string): TaskDraft => ({
   title: "",
-  owner: "",
+  owner: ownerName,
   status: "backlog",
   priority: "medium",
   points: 3,
   tags: ["customer-impact"]
-};
+});
 
-function TaskComposer({ startTransition, onDone }: TaskComposerProps) {
+function TaskComposer({ ownerName, onDone }: TaskComposerProps) {
   const createTask = useTaskStore((state) => state.createTask);
-  const [draft, setDraft] = useState<TaskDraft>(emptyDraft);
-  const [tagText, setTagText] = useState(emptyDraft.tags.join(", "));
+  const submitStarted = useRef(false);
+  const [draft, setDraft] = useState<TaskDraft>(() => createEmptyDraft(ownerName));
+  const [tagText, setTagText] = useState(() => createEmptyDraft(ownerName).tags.join(", "));
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitStarted.current) {
+      return;
+    }
+    submitStarted.current = true;
 
-    startTransition(() => {
-      createTask({
-        ...draft,
-        tags: tagText.split(",").map((tag) => tag.trim()).filter(Boolean)
-      });
-      setDraft(emptyDraft);
-      setTagText(emptyDraft.tags.join(", "));
-      onDone();
+    createTask({
+      ...draft,
+      owner: ownerName,
+      tags: tagText.split(",").map((tag) => tag.trim()).filter(Boolean)
     });
+    const nextDraft = createEmptyDraft(ownerName);
+    setDraft(nextDraft);
+    setTagText(nextDraft.tags.join(", "));
+    onDone();
   };
 
   return (
@@ -186,7 +189,7 @@ function TaskComposer({ startTransition, onDone }: TaskComposerProps) {
       className="overflow-hidden border-b border-line py-3"
       aria-label="Task composer"
     >
-      <div className="grid grid-cols-2 gap-3 px-1 lg:grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.6fr_auto]">
+      <div className="grid grid-cols-2 gap-3 px-1 lg:grid-cols-[1.7fr_0.8fr_0.8fr_0.6fr_auto]">
         <label className="col-span-2 block lg:col-span-1">
           <span className="mb-1 block text-xs font-black uppercase text-ink-soft">Title</span>
           <input
@@ -195,16 +198,6 @@ function TaskComposer({ startTransition, onDone }: TaskComposerProps) {
             onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
             className="focus-ring h-10 w-full rounded border border-line bg-panel-muted px-3 text-sm font-semibold"
             placeholder="Resolve customer escalation path"
-          />
-        </label>
-        <label className="col-span-2 block sm:col-span-1">
-          <span className="mb-1 block text-xs font-black uppercase text-ink-soft">Owner</span>
-          <input
-            required
-            value={draft.owner}
-            onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}
-            className="focus-ring h-10 w-full rounded border border-line bg-panel-muted px-3 text-sm font-semibold"
-            placeholder="Team member"
           />
         </label>
         <label className="block">
@@ -284,7 +277,7 @@ const KanbanColumn = memo(function KanbanColumn({
 }: KanbanColumnProps) {
   return (
     <article
-      className="min-h-[30rem] rounded border border-line bg-panel-muted p-3"
+      className="min-h-48 rounded border border-line bg-panel-muted p-3 md:min-h-[24rem]"
       onDragOver={(event) => event.preventDefault()}
       onDrop={() => onDrop(status)}
       aria-label={`${title} column`}
@@ -328,7 +321,7 @@ type TaskCardProps = {
 const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: TaskCardProps) {
   const updateTaskTitle = useTaskStore((state) => state.updateTaskTitle);
   const moveTask = useTaskStore((state) => state.moveTask);
-  const [isMovePending, startMoveTransition] = useTransition();
+  const isMutationPending = useTaskStore((state) => state.pendingTaskIds.includes(task.id));
   const [title, setTitle] = useState(task.title);
   const [isEditing, setIsEditing] = useState(false);
   const debouncedSave = useDebouncedCallback((nextTitle: string) => {
@@ -342,7 +335,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
       animate={{ opacity: isDragging ? 0.55 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.18 }}
-      draggable
+      draggable={!isMutationPending}
       onDragStartCapture={(event) => {
         event.dataTransfer.effectAllowed = "move";
         setDraggingId(task.id);
@@ -354,7 +347,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
         <GripVertical className="mt-1 shrink-0 text-ink-soft" size={16} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-xs font-black text-foreground">{task.id}</span>
+            <span className="font-mono text-xs font-black text-foreground">{task.key}</span>
             <span className={`rounded border px-2 py-1 text-[0.68rem] font-black uppercase ${priorityStyles[task.priority]}`}>
               {task.priority}
             </span>
@@ -367,21 +360,28 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
                 value={title}
                 rows={2}
                 autoFocus
+                disabled={isMutationPending}
                 onChange={(event) => {
                   const nextTitle = event.target.value;
                   setTitle(nextTitle);
                   debouncedSave(nextTitle);
                 }}
-                onBlur={() => setIsEditing(false)}
+                onBlur={() => {
+                  updateTaskTitle(task.id, title);
+                  setIsEditing(false);
+                }}
                 className="focus-ring w-full resize-none rounded border border-line bg-panel-muted p-2 text-sm font-bold leading-5"
               />
             </label>
           ) : (
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setTitle(task.title);
+                setIsEditing(true);
+              }}
               className="focus-ring mt-3 flex w-full items-start justify-between gap-3 text-left text-sm font-bold leading-5"
             >
-              <span>{title}</span>
+              <span>{task.title}</span>
               <Pencil className="mt-0.5 shrink-0 text-ink-soft" size={14} />
             </button>
           )}
@@ -396,14 +396,14 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
 
           <label className="mt-3 flex items-center justify-between gap-2 rounded border border-line bg-panel-muted px-2 py-2">
             <span className="text-xs font-black uppercase text-ink-soft">Move</span>
-            <span className="sr-only">Move task {title}</span>
+            <span className="sr-only">Move task {task.title}</span>
             <select
               value={task.status}
-              aria-label={`Move task ${title}`}
-              disabled={isMovePending}
+              aria-label={`Move task ${task.title}`}
+              disabled={isMutationPending}
               onChange={(event) => {
                 const nextStatus = event.target.value as TaskStatus;
-                startMoveTransition(() => moveTask(task.id, nextStatus));
+                moveTask(task.id, nextStatus);
               }}
               className="focus-ring min-w-32 rounded border border-line bg-panel px-2 py-1 text-xs font-black"
             >

@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: v-core-backend
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/vcore}
+    username: ${SPRING_DATASOURCE_USERNAME:vcore}
+    password: ${SPRING_DATASOURCE_PASSWORD:vcore}
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      connection-timeout: 5000
+  data:
+    redis:
+      url: ${SPRING_DATA_REDIS_URL:redis://localhost:6379}
+      timeout: 2s
+      repositories:
+        enabled: false
+  flyway:
+    enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: true
+  tracing:
+    enabled: ${OTEL_EXPORTER_ENABLED:false}
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:0.1}
+  otlp:
+    tracing:
+      export:
+        enabled: ${OTEL_EXPORTER_ENABLED:false}
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+      headers:
+        Authorization: ${GRAFANA_OTLP_AUTHORIZATION:}
+  observations:
+    key-values:
+      deployment.environment: ${DEPLOYMENT_ENVIRONMENT:local}
+
+logging:
+  pattern:
+    correlation: "[${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{requestId:-}] "
+  include-application-name: false
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: '@project.version@'
+
+vcore:
+  security:
+    bff-shared-secret: ${VCORE_BFF_SHARED_SECRET:}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+    display-request-duration: true
+    operations-sorter: method

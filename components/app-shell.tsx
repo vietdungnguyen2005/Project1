@@ -3,21 +3,26 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
-  Bell,
-  ChevronDown,
+  Boxes,
+  FlaskConical,
   Gauge,
   LayoutDashboard,
   Moon,
   Search,
   ShieldCheck,
-  Sun,
-  Users
+  Sun
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 import { KanbanBoard } from "@/components/kanban-board";
+import { CollaborationPanel } from "@/components/collaboration-panel";
+import { EvidenceCenter } from "@/components/evidence-center";
+import { WorkspaceOperations } from "@/components/workspace-operations";
 import { useSessionCleanup } from "@/hooks/use-session-cleanup";
 import { useTheme } from "@/hooks/use-theme";
+import { useWorkspaceEvents } from "@/hooks/use-workspace-events";
+import { fetchCloudActivities } from "@/lib/task-api";
+import { useTaskStore } from "@/store/task-store";
 import type { ActivityItem } from "@/lib/types";
 
 type Metrics = {
@@ -34,35 +39,48 @@ type AppShellProps = {
 };
 
 const navItems = [
-  { label: "Command", icon: LayoutDashboard },
-  { label: "Teams", icon: Users },
-  { label: "Performance", icon: Gauge },
-  { label: "Audit", icon: ShieldCheck }
+  { label: "Command", icon: LayoutDashboard, href: "#workspace" },
+  { label: "Board", icon: Activity, href: "#kanban-title" },
+  { label: "Operations", icon: Boxes, href: "#operations" },
+  { label: "Performance", icon: Gauge, href: "#performance" },
+  { label: "Audit", icon: ShieldCheck, href: "#audit" },
+  { label: "Evidence", icon: FlaskConical, href: "#evidence" }
 ];
-
-async function fetchSprintMetrics(initialMetrics: Metrics) {
-  await new Promise((resolve) => setTimeout(resolve, 90));
-  return initialMetrics;
-}
 
 export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
   const { isDark, toggleTheme } = useTheme();
   useSessionCleanup();
+  useWorkspaceEvents();
+  const tasks = useTaskStore((state) => state.tasks);
+  const query = useTaskStore((state) => state.query);
+  const setQuery = useTaskStore((state) => state.setQuery);
+  const lastInteractionMs = useTaskStore((state) => state.lastInteractionMs);
 
-  const { data: metrics = initialMetrics } = useQuery({
-    queryKey: ["sprint-metrics"],
-    queryFn: () => fetchSprintMetrics(initialMetrics),
-    initialData: initialMetrics
+  const { data: activities = initialActivity } = useQuery({
+    queryKey: ["activities"],
+    queryFn: ({ signal }) => fetchCloudActivities(signal),
+    initialData: initialActivity,
+    initialDataUpdatedAt: 0,
+    retry: 1,
+    staleTime: 15_000
   });
 
   const cards = useMemo(
     () => [
-      { label: "Velocity", value: metrics.velocity, suffix: "pts", tone: "teal" },
-      { label: "Cycle Time", value: metrics.cycleTime, suffix: "", tone: "blue" },
-      { label: "INP p95", value: metrics.inpP95, suffix: "", tone: "green" },
-      { label: "Lighthouse", value: metrics.lighthouse, suffix: "/100", tone: "amber" }
+      {
+        label: "Done points",
+        value: tasks.filter((task) => task.status === "done").reduce((sum, task) => sum + task.points, 0),
+        suffix: "pts"
+      },
+      {
+        label: "Active WIP",
+        value: tasks.filter((task) => task.status === "in-progress" || task.status === "review").length,
+        suffix: "tasks"
+      },
+      { label: "Last UI update", value: lastInteractionMs, suffix: "ms" },
+      { label: "Lighthouse proof", value: initialMetrics.lighthouse, suffix: "/100" }
     ],
-    [metrics]
+    [initialMetrics.lighthouse, lastInteractionMs, tasks]
   );
 
   return (
@@ -86,20 +104,15 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
                 <p className="text-xs font-medium text-ink-soft">Agile command layer</p>
               </div>
             </div>
-            <button
-              className="focus-ring grid size-10 place-items-center rounded border border-line bg-panel-muted text-foreground lg:hidden"
-              aria-label="Open notifications"
-            >
-              <Bell size={18} />
-            </button>
           </div>
 
-          <nav aria-label="Primary navigation" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:block lg:space-y-2">
+          <nav aria-label="Primary navigation" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:block lg:space-y-2">
             {navItems.map((item, index) => {
               const Icon = item.icon;
               return (
-                <button
+                <a
                   key={item.label}
+                  href={item.href}
                   className={`focus-ring flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-sm font-semibold transition ${
                     index === 0
                       ? "bg-foreground text-background"
@@ -108,7 +121,7 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
                 >
                   <Icon size={17} />
                   {item.label}
-                </button>
+                </a>
               );
             })}
           </nav>
@@ -141,6 +154,8 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
                 <Search size={18} aria-hidden="true" />
                 <span className="sr-only">Search workspace</span>
                 <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
                   className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-ink-soft"
                   placeholder="Search tasks, owners, tags"
                 />
@@ -153,14 +168,13 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
               >
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button className="focus-ring flex h-11 items-center gap-2 rounded bg-foreground px-4 text-sm font-bold text-background shadow-sm transition hover:-translate-y-0.5">
+              <div className="flex h-11 items-center rounded bg-foreground px-4 text-sm font-bold text-background shadow-sm">
                 Sprint 24
-                <ChevronDown size={16} />
-              </button>
+              </div>
             </div>
           </header>
 
-          <section aria-label="Sprint metrics" className="grid gap-3 py-5 sm:grid-cols-2 xl:grid-cols-4">
+          <section id="performance" aria-label="Live delivery metrics" className="grid gap-3 py-5 sm:grid-cols-2 xl:grid-cols-4">
             {cards.map((card, index) => (
               <motion.article
                 key={card.label}
@@ -178,20 +192,27 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
             ))}
           </section>
 
+          <div className="space-y-5 pb-5">
+            <WorkspaceOperations />
+            <CollaborationPanel />
+          </div>
+
           <div className="grid gap-5 xl:grid-cols-[1fr_22rem]">
             <KanbanBoard />
 
             <aside className="space-y-5">
-              <section className="rounded border border-line bg-panel p-4 shadow-[var(--shadow-soft)]" aria-labelledby="activity-title">
+              <section id="audit" className="rounded border border-line bg-panel p-4 shadow-[var(--shadow-soft)]" aria-labelledby="activity-title">
                 <h2 id="activity-title" className="text-base font-black">Live Collaboration</h2>
                 <ol className="mt-4 space-y-4">
-                  {initialActivity.map((item) => (
+                  {activities.map((item) => (
                     <li key={item.id} className="border-l-2 border-accent pl-3">
                       <p className="text-sm">
                         <strong>{item.actor}</strong> {item.action}{" "}
                         <span className="text-ink-soft">{item.target}</span>
                       </p>
-                      <p className="mt-1 text-xs font-semibold text-ink-soft">{item.time} ago</p>
+                      <p className="mt-1 text-xs font-semibold text-ink-soft">
+                        {item.time === "just now" ? item.time : `${item.time} ago`}
+                      </p>
                     </li>
                   ))}
                 </ol>
@@ -215,6 +236,10 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
                 </dl>
               </section>
             </aside>
+          </div>
+
+          <div className="pt-5">
+            <EvidenceCenter />
           </div>
         </main>
       </div>

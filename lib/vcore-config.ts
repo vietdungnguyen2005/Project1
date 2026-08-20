@@ -1,0 +1,12 @@
+import type { TaskStatus } from "@/lib/types";
+
+export const DEMO_WORKSPACE_ID = "00000000-0000-0000-0000-000000000100";
+export const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000200";
+
+export const WORKFLOW_COLUMN_IDS: Record<TaskStatus, string> = {
+  backlog: "00000000-0000-0000-0000-000000000401",
+  "in-progress": "00000000-0000-0000-0000-000000000402",
+  review: "00000000-0000-0000-0000-000000000403",
+  done: "00000000-0000-0000-0000-000000000404"
+};
+

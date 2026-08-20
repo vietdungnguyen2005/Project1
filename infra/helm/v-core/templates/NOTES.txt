@@ -1,0 +1,2 @@
+Create the referenced Secret before installing. It must provide database, Redis, and BFF runtime variables described in the repository's `.env.example`.
+

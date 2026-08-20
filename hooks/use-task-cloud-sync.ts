@@ -1,24 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { fetchCloudSession, fetchCloudTasks } from "@/lib/task-api";
 import { useTaskStore } from "@/store/task-store";
 
 export function useTaskCloudSync() {
   const hydrateTasks = useTaskStore((state) => state.hydrateTasks);
   const setSyncState = useTaskStore((state) => state.setSyncState);
-  const [isEnabled, setIsEnabled] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setIsEnabled(true), 2500);
-    return () => window.clearTimeout(timer);
-  }, []);
-
   const sessionQuery = useQuery({
     queryKey: ["session"],
     queryFn: ({ signal }) => fetchCloudSession(signal),
-    enabled: isEnabled,
     retry: 1,
     staleTime: 1000 * 60 * 10
   });
@@ -26,13 +18,12 @@ export function useTaskCloudSync() {
   const taskQuery = useQuery({
     queryKey: ["tasks"],
     queryFn: ({ signal }) => fetchCloudTasks(signal),
-    enabled: isEnabled,
     retry: 1,
     staleTime: 1000 * 20
   });
 
   useEffect(() => {
-    if (taskQuery.data?.tasks.length) {
+    if (taskQuery.data) {
       hydrateTasks(taskQuery.data.tasks);
       setSyncState("cloud");
       return;

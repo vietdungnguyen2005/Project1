@@ -1,0 +1,7 @@
+apiVersion: v2
+name: v-core
+description: V-Core Spring Boot backend deployment proof
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+icon: https://raw.githubusercontent.com/cncf/artwork/main/projects/kubernetes/icon/color/kubernetes-icon-color.svg

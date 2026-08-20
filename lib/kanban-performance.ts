@@ -1,4 +1,5 @@
 import type { Column, Task, TaskDraft, TaskStatus } from "@/lib/types";
+import { WORKFLOW_COLUMN_IDS } from "@/lib/vcore-config";
 
 export type GroupedTasks = Record<TaskStatus, Task[]>;
 
@@ -105,10 +106,14 @@ export function buildTask(draft: TaskDraft, id: string, updatedAt: string): Task
   return {
     ...draft,
     id,
+    key: id,
     title,
     owner,
     tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
-    updatedAt
+    updatedAt,
+    columnId: WORKFLOW_COLUMN_IDS[draft.status],
+    position: Date.now(),
+    version: 0
   };
 }
 

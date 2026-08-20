@@ -5,19 +5,28 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { initialTasks } from "@/lib/mock-data";
 import {
   buildTask,
-  createTask,
+  createTask as addTask,
   measureTaskInteraction,
   updateTaskStatus,
   updateTaskTitle
 } from "@/lib/kanban-performance";
-import { createCloudTask, patchCloudTask } from "@/lib/task-api";
+import {
+  ApiProblemError,
+  createCloudTask,
+  moveCloudTask,
+  renameCloudTask
+} from "@/lib/task-api";
+import { mergeTaskEditResult, mergeTaskMoveResult, replaceTask } from "@/lib/task-sync";
 import type { SyncState, Task, TaskDraft, TaskStatus } from "@/lib/types";
 
 type TaskState = {
   tasks: Task[];
+  query: string;
+  pendingTaskIds: string[];
   lastInteractionMs: number;
   syncState: SyncState;
   lastSyncError: string | null;
+  setQuery: (query: string) => void;
   createTask: (draft: TaskDraft) => void;
   moveTask: (taskId: string, status: TaskStatus) => void;
   updateTaskTitle: (taskId: string, title: string) => void;
@@ -26,72 +35,149 @@ type TaskState = {
   clearEphemeralState: () => void;
 };
 
-const nowLabel = () => "just now";
-const createId = () => `vc-${Math.random().toString(36).slice(2, 7)}`;
+const nowIso = () => new Date().toISOString();
+const createLocalId = () => `local-${crypto.randomUUID()}`;
+const createIdempotencyKey = (operation: string) => `${operation}-${crypto.randomUUID()}`;
+
+const syncErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof ApiProblemError && error.status === 409
+    ? `Conflict: ${error.message} Your optimistic change was rolled back.`
+    : fallback;
 
 export const useTaskStore = create<TaskState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       tasks: initialTasks,
+      query: "",
+      pendingTaskIds: [],
       lastInteractionMs: 0,
       syncState: "local",
       lastSyncError: null,
+      setQuery: (query) => set({ query }),
       createTask: (draft) => {
+        const localId = createLocalId();
+        const optimisticTask = buildTask(draft, localId, nowIso());
+        if (!optimisticTask) {
+          return;
+        }
+
         set((state) => {
-          const task = buildTask(draft, createId(), nowLabel());
-
-          if (!task) {
-            return state;
-          }
-
-          const result = measureTaskInteraction(() => createTask(state.tasks, task, task.id, task.updatedAt));
-          void createCloudTask(task)
-            .then(() => set({ syncState: "cloud", lastSyncError: null }))
-            .catch(() => set({ syncState: "offline", lastSyncError: "Create saved locally; cloud sync pending." }));
-
+          const result = measureTaskInteraction(() =>
+            addTask(state.tasks, draft, localId, optimisticTask.updatedAt)
+          );
           return {
             tasks: result.value,
+            pendingTaskIds: [...state.pendingTaskIds, localId],
             lastInteractionMs: result.durationMs,
             syncState: "syncing",
             lastSyncError: null
           };
         });
+
+        void createCloudTask(draft, createIdempotencyKey("create"))
+          .then((serverTask) => {
+            set((state) => ({
+              tasks: replaceTask(state.tasks, localId, serverTask),
+              pendingTaskIds: state.pendingTaskIds.filter((id) => id !== localId),
+              syncState: "cloud",
+              lastSyncError: null
+            }));
+          })
+          .catch((error: unknown) => {
+            set((state) => ({
+              tasks: state.tasks.filter((task) => task.id !== localId),
+              pendingTaskIds: state.pendingTaskIds.filter((id) => id !== localId),
+              syncState: "offline",
+              lastSyncError: syncErrorMessage(error, "Create was rolled back because cloud sync failed.")
+            }));
+          });
       },
       moveTask: (taskId, status) => {
-        set((state) => {
-          const updatedAt = nowLabel();
-          const result = measureTaskInteraction(() =>
-            updateTaskStatus(state.tasks, taskId, status, updatedAt)
-          );
-          void patchCloudTask(taskId, { status, updatedAt })
-            .then(() => set({ syncState: "cloud", lastSyncError: null }))
-            .catch(() => set({ syncState: "offline", lastSyncError: "Move saved locally; cloud sync pending." }));
+        const state = get();
+        if (state.pendingTaskIds.includes(taskId)) {
+          return;
+        }
+        const original = state.tasks.find((task) => task.id === taskId);
+        if (!original || original.status === status) {
+          return;
+        }
 
-          return {
-            tasks: result.value,
-            lastInteractionMs: result.durationMs,
-            syncState: "syncing",
-            lastSyncError: null
-          };
+        const updatedAt = nowIso();
+        const result = measureTaskInteraction(() =>
+          updateTaskStatus(state.tasks, taskId, status, updatedAt)
+        );
+        set({
+          tasks: result.value,
+          pendingTaskIds: [...state.pendingTaskIds, taskId],
+          lastInteractionMs: result.durationMs,
+          syncState: "syncing",
+          lastSyncError: null
         });
+
+        void moveCloudTask(original, status, createIdempotencyKey("move"))
+          .then((serverResult) => {
+            set((current) => ({
+              tasks: current.tasks.map((task) => mergeTaskMoveResult(task, serverResult)),
+              pendingTaskIds: current.pendingTaskIds.filter((id) => id !== taskId),
+              syncState: "cloud",
+              lastSyncError: null
+            }));
+          })
+          .catch((error: unknown) => {
+            set((current) => ({
+              tasks: current.tasks.map((task) =>
+                task.id === taskId
+                  ? { ...task, status: original.status, columnId: original.columnId, position: original.position }
+                  : task
+              ),
+              pendingTaskIds: current.pendingTaskIds.filter((id) => id !== taskId),
+              syncState: "offline",
+              lastSyncError: syncErrorMessage(error, "Move was rolled back because cloud sync failed.")
+            }));
+          });
       },
       updateTaskTitle: (taskId, title) => {
-        set((state) => {
-          const updatedAt = nowLabel();
-          const result = measureTaskInteraction(() =>
-            updateTaskTitle(state.tasks, taskId, title, updatedAt)
-          );
-          void patchCloudTask(taskId, { title, updatedAt })
-            .then(() => set({ syncState: "cloud", lastSyncError: null }))
-            .catch(() => set({ syncState: "offline", lastSyncError: "Edit saved locally; cloud sync pending." }));
+        const state = get();
+        if (state.pendingTaskIds.includes(taskId)) {
+          return;
+        }
+        const original = state.tasks.find((task) => task.id === taskId);
+        const normalizedTitle = title.trim();
+        if (!original || !normalizedTitle || original.title === normalizedTitle) {
+          return;
+        }
 
-          return {
-            tasks: result.value,
-            lastInteractionMs: result.durationMs,
-            syncState: "syncing",
-            lastSyncError: null
-          };
+        const updatedAt = nowIso();
+        const result = measureTaskInteraction(() =>
+          updateTaskTitle(state.tasks, taskId, normalizedTitle, updatedAt)
+        );
+        set({
+          tasks: result.value,
+          pendingTaskIds: [...state.pendingTaskIds, taskId],
+          lastInteractionMs: result.durationMs,
+          syncState: "syncing",
+          lastSyncError: null
         });
+
+        void renameCloudTask(original, normalizedTitle, createIdempotencyKey("edit"))
+          .then((serverResult) => {
+            set((current) => ({
+              tasks: current.tasks.map((task) => mergeTaskEditResult(task, serverResult)),
+              pendingTaskIds: current.pendingTaskIds.filter((id) => id !== taskId),
+              syncState: "cloud",
+              lastSyncError: null
+            }));
+          })
+          .catch((error: unknown) => {
+            set((current) => ({
+              tasks: current.tasks.map((task) =>
+                task.id === taskId ? { ...task, title: original.title } : task
+              ),
+              pendingTaskIds: current.pendingTaskIds.filter((id) => id !== taskId),
+              syncState: "offline",
+              lastSyncError: syncErrorMessage(error, "Edit was rolled back because cloud sync failed.")
+            }));
+          });
       },
       hydrateTasks: (tasks) => {
         set({ tasks, syncState: "cloud", lastSyncError: null });
@@ -100,11 +186,11 @@ export const useTaskStore = create<TaskState>()(
         set({ syncState: state, lastSyncError: error });
       },
       clearEphemeralState: () => {
-        set({ lastInteractionMs: 0 });
+        set({ lastInteractionMs: 0, pendingTaskIds: [] });
       }
     }),
     {
-      name: "v-core-task-cache",
+      name: "v-core-task-cache-v2",
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({ tasks: state.tasks })
     }

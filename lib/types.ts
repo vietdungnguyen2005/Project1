@@ -4,6 +4,7 @@ export type TaskPriority = "critical" | "high" | "medium" | "low";
 
 export type Task = {
   id: string;
+  key: string;
   title: string;
   owner: string;
   status: TaskStatus;
@@ -11,6 +12,9 @@ export type Task = {
   points: number;
   updatedAt: string;
   tags: string[];
+  columnId: string;
+  position: number;
+  version: number;
 };
 
 export type TaskDraft = {
@@ -41,6 +45,6 @@ export type SyncState = "local" | "syncing" | "cloud" | "offline";
 export type SessionUser = {
   email: string;
   name: string;
-  provider: "cloudflare-access" | "demo";
-  role: "owner" | "member";
+  provider: "bff";
+  role: "owner" | "admin" | "member" | "viewer";
 };

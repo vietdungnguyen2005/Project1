@@ -2,6 +2,7 @@
   "name": "v-core-saas",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -15,7 +16,6 @@
     "test:watch": "vitest",
     "e2e": "npm run build && playwright test",
     "proof:performance": "tsx scripts/prove-performance.ts",
-    "proof:api": "tsx scripts/prove-api.ts",
     "proof:lighthouse": "tsx scripts/run-lighthouse.ts",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run proof:performance && npm run e2e"
   },
@@ -47,7 +47,7 @@
     "wrangler": "^4.114.0"
   },
   "overrides": {
-    "postcss": "8.5.12",
+    "postcss": "8.5.23",
     "sharp": "0.35.0"
   }
 }

@@ -1,0 +1,4 @@
+BACKEND_ORIGIN=http://localhost:8080
+BFF_SHARED_SECRET=local-development-only
+DEMO_USER_EMAIL=owner@v-core.local
+

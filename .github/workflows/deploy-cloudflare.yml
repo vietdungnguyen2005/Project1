@@ -1,8 +1,6 @@
 name: Deploy Cloudflare Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -14,7 +12,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm install
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
       - run: npx wrangler pages deploy out --project-name v-core-saas --branch main

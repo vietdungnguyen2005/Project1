@@ -1,62 +1,82 @@
 import type { ActivityItem, Column, Task } from "@/lib/types";
 
 export const columns: Column[] = [
-  { id: "backlog", title: "Backlog", limit: 8 },
-  { id: "in-progress", title: "In Progress", limit: 4 },
-  { id: "review", title: "Review", limit: 3 },
-  { id: "done", title: "Done", limit: 10 }
+  { id: "backlog", title: "Backlog", limit: 200 },
+  { id: "in-progress", title: "In Progress", limit: 3 },
+  { id: "review", title: "Review", limit: 2 },
+  { id: "done", title: "Done", limit: 200 }
 ];
 
 export const initialTasks: Task[] = [
   {
-    id: "vc-104",
+    id: "00000000-0000-0000-0000-000000000501",
+    key: "VC-104",
     title: "Instrument INP budget for inline title edits",
     owner: "An Le",
     status: "backlog",
     priority: "high",
     points: 5,
     updatedAt: "2m ago",
-    tags: ["web-vitals", "editor"]
+    tags: ["web-vitals", "editor"],
+    columnId: "00000000-0000-0000-0000-000000000401",
+    position: 1000,
+    version: 0
   },
   {
-    id: "vc-122",
+    id: "00000000-0000-0000-0000-000000000502",
+    key: "VC-122",
     title: "Ship granular Kanban memo boundaries",
     owner: "Minh Tran",
     status: "in-progress",
     priority: "critical",
     points: 8,
     updatedAt: "9m ago",
-    tags: ["performance", "kanban"]
+    tags: ["performance", "kanban"],
+    columnId: "00000000-0000-0000-0000-000000000402",
+    position: 1000,
+    version: 0
   },
   {
-    id: "vc-138",
+    id: "00000000-0000-0000-0000-000000000503",
+    key: "VC-138",
     title: "Add long-session cleanup controller",
     owner: "Bao Nguyen",
     status: "in-progress",
     priority: "high",
     points: 5,
     updatedAt: "14m ago",
-    tags: ["cleanup", "effects"]
+    tags: ["cleanup", "effects"],
+    columnId: "00000000-0000-0000-0000-000000000402",
+    position: 2000,
+    version: 0
   },
   {
-    id: "vc-149",
+    id: "00000000-0000-0000-0000-000000000504",
+    key: "VC-149",
     title: "Cache sprint metrics with TanStack Query",
     owner: "Linh Pham",
     status: "review",
     priority: "medium",
     points: 3,
     updatedAt: "23m ago",
-    tags: ["query", "ssr"]
+    tags: ["query", "ssr"],
+    columnId: "00000000-0000-0000-0000-000000000403",
+    position: 1000,
+    version: 0
   },
   {
-    id: "vc-151",
+    id: "00000000-0000-0000-0000-000000000505",
+    key: "VC-151",
     title: "Validate dark mode contrast in command surfaces",
     owner: "Quan Vo",
     status: "done",
     priority: "low",
     points: 2,
     updatedAt: "41m ago",
-    tags: ["a11y", "theme"]
+    tags: ["a11y", "theme"],
+    columnId: "00000000-0000-0000-0000-000000000404",
+    position: 1000,
+    version: 0
   }
 ];
 

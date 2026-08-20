@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  verify:
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,7 +14,51 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm install
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
       - run: npm audit --audit-level=high
+      - name: Upload frontend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-evidence
+          path: |
+            reports/*.json
+            reports/*.xml
+            playwright-report/
+            docs/evidence/*.png
+          if-no-files-found: warn
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Verify backend with PostgreSQL and Redis Testcontainers
+        working-directory: backend
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Build backend container
+        run: docker build --tag v-core-backend:ci backend
+      - name: Upload backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-evidence
+          path: backend/target/surefire-reports/
+          if-no-files-found: error
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.1
+      - run: helm lint infra/helm/v-core
+      - run: helm template v-core infra/helm/v-core --set image.repository=example/v-core --set image.tag=ci > /dev/null
