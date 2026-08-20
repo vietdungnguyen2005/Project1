@@ -62,3 +62,15 @@ jobs:
           version: v3.20.1
       - run: helm lint infra/helm/v-core
       - run: helm template v-core infra/helm/v-core --set image.repository=example/v-core --set image.tag=ci > /dev/null
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Check and validate AWS infrastructure
+        working-directory: infra/terraform/aws
+        run: |
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate

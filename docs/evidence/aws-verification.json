@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-20T15:42:07Z",
+  "region": "us-east-1",
+  "gitSha": "d58e9b57f2c57497a622230641acac5d17424bce",
+  "terraform": { "created": 42, "changed": 0, "destroyed": 0 },
+  "teardown": { "plannedDestroy": 42, "destroyed": 42, "terraformStateResourcesAfterDestroy": 0 },
+  "runtime": {
+    "readinessHttpStatus": 200,
+    "unauthenticatedApiHttpStatus": 401,
+    "ecsDesired": 1,
+    "ecsRunning": 1,
+    "ecsPending": 0,
+    "rdsEncrypted": true,
+    "rdsPublic": false,
+    "redisTransitEncryption": true,
+    "redisAtRestEncryption": true
+  },
+  "painPoint": {
+    "name": "conflict-safe-wip-limit",
+    "concurrentHttpStatuses": [200, 409],
+    "targetColumnTaskCount": 3,
+    "targetColumnWipLimit": 3
+  }
+}

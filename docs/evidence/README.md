@@ -2,6 +2,12 @@
 
 This directory contains recruiter-facing visual evidence. Executable evidence remains authoritative: screenshots illustrate the product, while CI artifacts contain JUnit, Playwright, performance, and backend integration results.
 
+## Deployment evidence
+
+- [Persistent free-tier deployment](live-deployment.md)
+- [Short-lived AWS deployment and pain-point proof](aws-deployment.md)
+- [Machine-readable AWS verification](aws-verification.json)
+
 ## Pain-point evidence
 
 | Claim | Executable proof | Expected invariant |

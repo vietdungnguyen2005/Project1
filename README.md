@@ -7,6 +7,7 @@ V-Core is a portfolio-grade agile delivery workspace built to demonstrate backen
 - Application: [v-core-saas.pages.dev](https://v-core-saas.pages.dev)
 - Backend readiness: [v-core-api.onrender.com/actuator/health/readiness](https://v-core-api.onrender.com/actuator/health/readiness)
 - Public deployment proof: [docs/evidence/live-deployment.md](docs/evidence/live-deployment.md)
+- Short-lived AWS deployment proof: [docs/evidence/aws-deployment.md](docs/evidence/aws-deployment.md)
 
 The backend uses Render's free web-service tier, so the first request after 15 minutes without inbound traffic can take about a minute while the container wakes up.
 
@@ -99,7 +100,7 @@ The long-lived free demo is split by runtime, not by repository:
 2. A container platform hosts the Spring Boot image.
 3. Neon provides PostgreSQL and Upstash provides Redis.
 
-The live demo currently uses this split with `BACKEND_ORIGIN` and matching BFF secrets configured in provider secret stores. AWS/Terraform deployment evidence can be added later without duplicating application code or creating a second project.
+The live demo uses this split with `BACKEND_ORIGIN` and matching BFF secrets configured in provider secret stores. The same backend image has also been verified on ECS with managed RDS and Redis through the repository's Terraform stack; AWS remains short-lived evidence rather than a duplicate project.
 
 ## Repository map
 

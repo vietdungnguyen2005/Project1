@@ -18,5 +18,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.tsbuildinfo
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
 .idea
 *.iml
