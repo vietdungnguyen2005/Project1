@@ -20,7 +20,7 @@ jobs:
       - run: npm audit --audit-level=high
       - name: Upload frontend evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-evidence
           path: |
@@ -47,7 +47,7 @@ jobs:
         run: docker build --tag v-core-backend:ci backend
       - name: Upload backend evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-integration-evidence
           path: backend/target/surefire-reports/
