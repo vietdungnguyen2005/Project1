@@ -17,7 +17,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
-      - run: npm audit --audit-level=high
+      - run: npm run audit:dependencies
       - name: Upload frontend evidence
         if: always()
         uses: actions/upload-artifact@v4

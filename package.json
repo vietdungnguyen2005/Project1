@@ -11,6 +11,7 @@
     "preview": "serve out -l 3010",
     "deploy:cloudflare": "wrangler pages deploy out --project-name v-core-saas",
     "lint": "eslint .",
+    "audit:dependencies": "npm audit --omit=dev --audit-level=high && audit-ci --config audit-ci.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,30 +25,34 @@
     "@tanstack/react-query-devtools": "^5.101.4",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.26.0",
-    "next": "^16.2.11",
+    "next": "16.4.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "audit-ci": "7.1.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.2",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.2.11",
+    "eslint-config-next": "16.4.2",
     "jsdom": "^29.1.1",
     "lighthouse": "^13.4.1",
     "serve": "^14.2.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.114.0"
+    "vitest": "4.1.12",
+    "wrangler": "4.151.1"
   },
   "overrides": {
-    "postcss": "8.5.23",
-    "sharp": "0.35.0"
+    "postcss": "8.5.26",
+    "sharp": "0.35.5",
+    "serve": {
+      "compression": "1.8.2"
+    }
   }
 }

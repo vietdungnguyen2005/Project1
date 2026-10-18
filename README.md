@@ -1,5 +1,9 @@
 # V-Core
 
+### Dependency audit policy (2026-10-18)
+
+Run `npm run audit:dependencies`. Runtime dependencies retain a strict high/critical audit. The full audit uses `audit-ci.json` with one user-approved, exact advisory-and-lint-path exception for GHSA-vfj7-8cjw-p6xm (unpatched braces stack exhaustion), expiring at 00:00 Asia/Bangkok on 2026-11-18. This is accepted risk, not a vulnerability fix or a zero-findings claim. Lint only trusted repository configuration; do not feed untrusted root-directory glob patterns into the lint tool. All other high/critical findings and audit-service failures still block CI. Remove the exception when upstream is patched; do not renew automatically.
+
 V-Core is a portfolio-grade agile delivery workspace built to demonstrate backend and cloud engineering, not only UI implementation. A statically exported Next.js client runs on Cloudflare Pages, a thin Worker acts as a trusted backend-for-frontend (BFF), and a Java 21 Spring Boot modular monolith owns business data in PostgreSQL. Redis connectivity remains configured, but authorization no longer uses a Redis membership cache.
 
 ## Live demo
