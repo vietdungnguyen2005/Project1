@@ -15,6 +15,7 @@ import {
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 import { KanbanBoard } from "@/components/kanban-board";
+import { OperatorAccess, OperatorProvider } from "@/components/operator-access";
 import { CollaborationPanel } from "@/components/collaboration-panel";
 import { EvidenceCenter } from "@/components/evidence-center";
 import { WorkspaceOperations } from "@/components/workspace-operations";
@@ -84,7 +85,7 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
   );
 
   return (
-    <div className="min-h-screen">
+    <OperatorProvider><div className="min-h-screen">
       <a
         href="#workspace"
         className="focus-ring fixed left-4 top-4 z-50 -translate-y-20 rounded bg-accent px-3 py-2 text-sm font-semibold text-black focus:translate-y-0"
@@ -174,6 +175,8 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
             </div>
           </header>
 
+          <OperatorAccess />
+
           <section id="performance" aria-label="Live delivery metrics" className="grid gap-3 py-5 sm:grid-cols-2 xl:grid-cols-4">
             {cards.map((card, index) => (
               <motion.article
@@ -243,6 +246,6 @@ export function AppShell({ initialActivity, initialMetrics }: AppShellProps) {
           </div>
         </main>
       </div>
-    </div>
+    </div></OperatorProvider>
   );
 }

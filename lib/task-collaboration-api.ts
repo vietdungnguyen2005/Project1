@@ -1,3 +1,4 @@
+import { operatorFetch } from "@/lib/operator-session";
 import { DEMO_PROJECT_ID, DEMO_WORKSPACE_ID } from "@/lib/vcore-config";
 
 const taskUrl = (taskId: string) =>
@@ -30,7 +31,7 @@ export async function assignTaskMember(
   expectedVersion: number,
   idempotencyKey: string
 ) {
-  const response = await fetch(`${taskUrl(taskId)}/assignee`, {
+  const response = await operatorFetch(`${taskUrl(taskId)}/assignee`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -43,7 +44,7 @@ export async function assignTaskMember(
 }
 
 export async function addTaskComment(taskId: string, body: string, idempotencyKey: string) {
-  const response = await fetch(`${taskUrl(taskId)}/comments`, {
+  const response = await operatorFetch(`${taskUrl(taskId)}/comments`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -56,7 +57,7 @@ export async function addTaskComment(taskId: string, body: string, idempotencyKe
 }
 
 export async function fetchTaskComments(taskId: string, signal?: AbortSignal) {
-  const response = await fetch(`${taskUrl(taskId)}/comments`, {
+  const response = await operatorFetch(`${taskUrl(taskId)}/comments`, {
     signal,
     headers: { Accept: "application/json" }
   });

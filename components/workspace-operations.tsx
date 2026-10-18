@@ -1,5 +1,7 @@
 "use client";
 
+import { useOperatorAccess } from "@/components/operator-access";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Loader2, Send, SlidersHorizontal, Users } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -15,6 +17,7 @@ import {
 const commandKey = (operation: string) => `${operation}-${crypto.randomUUID()}`;
 
 export function WorkspaceOperations() {
+  const { canAdmin } = useOperatorAccess();
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceInvitation["role"]>("MEMBER");
@@ -62,11 +65,11 @@ export function WorkspaceOperations() {
 
   const submitInvite = (event: FormEvent) => {
     event.preventDefault();
-    if (!invite.isPending) invite.mutate();
+    if (canAdmin && !invite.isPending) invite.mutate();
   };
   const submitProject = (event: FormEvent) => {
     event.preventDefault();
-    if (!createProject.isPending) createProject.mutate();
+    if (canAdmin && !createProject.isPending) createProject.mutate();
   };
 
   return (
@@ -136,7 +139,7 @@ export function WorkspaceOperations() {
                         className="focus-ring mt-1 h-9 w-full rounded border border-line bg-panel px-2 text-sm font-bold"
                       />
                     </label>
-                    <button disabled={updateWip.isPending} className="focus-ring mt-2 flex h-9 w-full items-center justify-center gap-2 rounded border border-line bg-panel text-xs font-black hover:border-accent">
+                    <button disabled={!canAdmin || updateWip.isPending} className="focus-ring mt-2 flex h-9 w-full items-center justify-center gap-2 rounded border border-line bg-panel text-xs font-black hover:border-accent">
                       <SlidersHorizontal size={14} /> Commit limit
                     </button>
                   </form>
@@ -153,7 +156,7 @@ export function WorkspaceOperations() {
               <Field label="Sprint name" value={projectDraft.sprintName} onChange={(sprintName) => setProjectDraft((current) => ({ ...current, sprintName }))} required />
               <Field label="Description" value={projectDraft.description} onChange={(description) => setProjectDraft((current) => ({ ...current, description }))} required />
               <Field label="Sprint goal" value={projectDraft.sprintGoal} onChange={(sprintGoal) => setProjectDraft((current) => ({ ...current, sprintGoal }))} required />
-              <button disabled={createProject.isPending} className="focus-ring mt-5 flex h-10 items-center justify-center gap-2 rounded bg-foreground px-4 text-sm font-black text-background">
+              <button disabled={!canAdmin || createProject.isPending} className="focus-ring mt-5 flex h-10 items-center justify-center gap-2 rounded bg-foreground px-4 text-sm font-black text-background">
                 {createProject.isPending ? <Loader2 className="animate-spin" size={16} /> : <Boxes size={16} />} Create stream
               </button>
             </div>
@@ -180,7 +183,7 @@ export function WorkspaceOperations() {
               <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as WorkspaceInvitation["role"])} className="focus-ring h-10 rounded border border-line bg-panel px-2 text-sm font-bold" aria-label="Invitation role">
                 <option value="ADMIN">Admin</option><option value="MEMBER">Member</option><option value="VIEWER">Viewer</option>
               </select>
-              <button disabled={invite.isPending} className="focus-ring flex h-10 items-center gap-2 rounded bg-accent px-3 text-sm font-black text-black"><Send size={15} /> Invite</button>
+              <button disabled={!canAdmin || invite.isPending} className="focus-ring flex h-10 items-center gap-2 rounded bg-accent px-3 text-sm font-black text-black"><Send size={15} /> Invite</button>
             </div>
           </form>
 

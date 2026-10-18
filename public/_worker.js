@@ -1,6 +1,22 @@
 const BFF_KEY_HEADER = "X-VCore-Bff-Key";
 const USER_EMAIL_HEADER = "X-VCore-User-Email";
 const REQUEST_ID_HEADER = "X-Request-Id";
+const uuid = "[0-9a-f-]{36}";
+const workspace = `/api/workspaces/${uuid}`;
+const project = `${workspace}/projects/${uuid}`;
+const task = `${project}/tasks/${uuid}`;
+const apiRoutes = [
+  { path: /^\/api\/(?:session|health|auth\/session)$/, methods: ["GET", "HEAD"] },
+  { path: /^\/api\/auth\/(?:login|logout)$/, methods: ["POST"] },
+  { path: new RegExp(`^${workspace}/(?:overview|activities|events)$`, "i"), methods: ["GET"] },
+  { path: new RegExp(`^${workspace}/(?:invitations|projects)$`, "i"), methods: ["POST"] },
+  { path: new RegExp(`^${project}/tasks$`, "i"), methods: ["GET", "POST"] },
+  { path: new RegExp(`^${task}$`, "i"), methods: ["PATCH"] },
+  { path: new RegExp(`^${task}/moves$`, "i"), methods: ["POST"] },
+  { path: new RegExp(`^${task}/assignee$`, "i"), methods: ["PATCH"] },
+  { path: new RegExp(`^${task}/comments$`, "i"), methods: ["GET", "POST"] },
+  { path: new RegExp(`^${project}/workflow-columns/${uuid}$`, "i"), methods: ["PATCH"] }
+];
 
 function jsonProblem(status, title, detail) {
   return new Response(JSON.stringify({ type: "about:blank", title, status, detail }), {
@@ -27,13 +43,20 @@ function backendConfiguration(env) {
   }
 }
 
-function trustedIdentity(request, env) {
-  return request.headers.get("Cf-Access-Authenticated-User-Email") ||
-    env.DEMO_USER_EMAIL?.trim() ||
-    "owner@v-core.local";
-}
-
 async function proxyApi(request, env) {
+  const route = apiRoutes.find((candidate) => candidate.path.test(new URL(request.url).pathname));
+  if (!route) return jsonProblem(404, "Not found", "This API route is not exposed.");
+  if (!route.methods.includes(request.method)) {
+    const response = jsonProblem(405, "Method not allowed", "This API method is not exposed.");
+    response.headers.set("Allow", route.methods.join(", "));
+    return response;
+  }
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const origin = request.headers.get("Origin");
+    if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
+      return jsonProblem(403, "Forbidden", "Cross-origin mutations are not allowed.");
+    }
+  }
   const backend = backendConfiguration(env);
   if (!backend) {
     return jsonProblem(
@@ -52,9 +75,9 @@ async function proxyApi(request, env) {
 
   headers.delete(BFF_KEY_HEADER);
   headers.delete(USER_EMAIL_HEADER);
+  headers.delete("Cf-Access-Authenticated-User-Email");
   headers.delete("Host");
   headers.set(BFF_KEY_HEADER, backend.sharedSecret);
-  headers.set(USER_EMAIL_HEADER, trustedIdentity(request, env));
   headers.set(REQUEST_ID_HEADER, request.headers.get(REQUEST_ID_HEADER) || crypto.randomUUID());
   headers.set("X-Forwarded-Host", incomingUrl.host);
   headers.set("X-Forwarded-Proto", incomingUrl.protocol.replace(":", ""));

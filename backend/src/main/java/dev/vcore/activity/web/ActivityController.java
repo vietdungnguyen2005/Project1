@@ -3,9 +3,13 @@ package dev.vcore.activity.web;
 import dev.vcore.activity.application.ActivityQueryService;
 import dev.vcore.activity.application.ActivityQueryService.ActivityListView;
 import dev.vcore.activity.application.SseEventHub;
+import dev.vcore.activity.application.SseSubscriptionAccess;
 import dev.vcore.identity.application.AuthenticatedUser;
 import dev.vcore.workspace.application.WorkspaceAccessService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,8 +44,17 @@ public class ActivityController {
     }
 
     @GetMapping(path = "/events", produces = "text/event-stream")
-    SseEmitter subscribe(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID workspaceId) {
+    SseEmitter subscribe(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID workspaceId,
+            @org.springframework.security.core.annotation.CurrentSecurityContext(expression = "authentication")
+                    Authentication authentication,
+            HttpServletRequest request) {
         workspaceAccessService.requireMembership(user.id(), workspaceId);
-        return eventHub.subscribe(workspaceId);
+        boolean demo = authentication instanceof AnonymousAuthenticationToken;
+        var session = demo ? null : request.getSession(false);
+        return eventHub.subscribe(
+                workspaceId,
+                new SseSubscriptionAccess.Identity(user.id(), session == null ? "" : session.getId(), demo));
     }
 }

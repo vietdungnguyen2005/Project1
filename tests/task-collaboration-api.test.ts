@@ -10,6 +10,7 @@ describe("task collaboration API", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "task-id", version: 5 }))
     );
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await assignTaskMember("task-id", "member-id", 4, "assign-key");
@@ -27,15 +28,17 @@ describe("task collaboration API", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "comment-id", body: "Acceptance checked" }), { status: 201 })
     );
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await addTaskComment("task-id", "  Acceptance checked  ", "comment-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("comment-key");
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/tasks/task-id/comments"),
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "Idempotency-Key": "comment-key" }),
+        headers: expect.any(Headers),
         body: JSON.stringify({ body: "Acceptance checked" })
       })
     );

@@ -4,37 +4,53 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Service
 public class SseEventHub {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(SseEventHub.class);
     private static final long EMITTER_TIMEOUT_MILLIS = 30 * 60 * 1000L;
+    private final ConcurrentHashMap<UUID, Set<Subscriber>> subscribers = new ConcurrentHashMap<>();
+    private final java.util.function.BiPredicate<UUID, SseSubscriptionAccess.Identity> authorization;
 
-    private final ConcurrentHashMap<UUID, Set<SseEmitter>> emittersByWorkspace = new ConcurrentHashMap<>();
+    @org.springframework.beans.factory.annotation.Autowired
+    public SseEventHub(SseSubscriptionAccess access) {
+        this(access::allowed);
+    }
 
-    public SseEmitter subscribe(UUID workspaceId) {
-        SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MILLIS);
-        Set<SseEmitter> workspaceEmitters =
-                emittersByWorkspace.computeIfAbsent(workspaceId, ignored -> ConcurrentHashMap.newKeySet());
-        workspaceEmitters.add(emitter);
-        Runnable remove = () -> remove(workspaceId, emitter);
-        emitter.onCompletion(remove);
-        emitter.onTimeout(remove);
-        emitter.onError(error -> remove.run());
-        return emitter;
+    SseEventHub(java.util.function.BiPredicate<UUID, SseSubscriptionAccess.Identity> authorization) {
+        this.authorization = authorization;
+    }
+
+    public SseEmitter subscribe(UUID workspaceId, SseSubscriptionAccess.Identity identity) {
+        if (!authorization.test(workspaceId, identity))
+            throw new AccessDeniedException("Stream access is no longer valid.");
+        var subscriber = new Subscriber(new SseEmitter(EMITTER_TIMEOUT_MILLIS), identity);
+        subscribers.compute(workspaceId, (id, existing) -> {
+            var set = existing == null ? ConcurrentHashMap.<Subscriber>newKeySet() : existing;
+            set.add(subscriber);
+            return set;
+        });
+        Runnable remove = () -> unregister(workspaceId, subscriber);
+        subscriber.emitter.onCompletion(remove);
+        subscriber.emitter.onTimeout(remove);
+        subscriber.emitter.onError(error -> remove.run());
+        send(workspaceId, subscriber, SseEmitter.event().comment("connected"));
+        return subscriber.emitter;
     }
 
     public void publish(OutboxEvent event) {
-        Set<SseEmitter> emitters = emittersByWorkspace.get(event.workspaceId());
-        if (emitters == null) {
-            return;
-        }
-        emitters.forEach(emitter -> send(
+        Set<Subscriber> active = subscribers.get(event.workspaceId());
+        if (active == null) return;
+        active.forEach(subscriber -> send(
                 event.workspaceId(),
-                emitter,
+                subscriber,
                 SseEmitter.event()
                         .id(event.id().toString())
                         .name(event.eventType())
@@ -43,27 +59,58 @@ public class SseEventHub {
 
     @Scheduled(fixedDelayString = "${vcore.sse.heartbeat-interval:15000}")
     void heartbeat() {
-        emittersByWorkspace.forEach((workspaceId, emitters) -> emitters.forEach(
-                emitter -> send(workspaceId, emitter, SseEmitter.event().comment("heartbeat"))));
+        subscribers.forEach((workspaceId, active) -> active.forEach(
+                subscriber -> send(workspaceId, subscriber, SseEmitter.event().comment("heartbeat"))));
     }
 
-    private void send(UUID workspaceId, SseEmitter emitter, SseEmitter.SseEventBuilder event) {
+    private void send(UUID workspaceId, Subscriber subscriber, SseEmitter.SseEventBuilder event) {
+        synchronized (subscriber) {
+            if (subscriber.closed) return;
+            try {
+                // Recheck before every business event as well as idle heartbeats.
+                if (!authorization.test(workspaceId, subscriber.identity)) {
+                    close(workspaceId, subscriber);
+                    return;
+                }
+                subscriber.emitter.send(event);
+            } catch (DataAccessException exception) {
+                LOGGER.debug("Closing SSE subscription because authorization cannot be verified", exception);
+                close(workspaceId, subscriber);
+            } catch (IOException | IllegalStateException exception) {
+                close(workspaceId, subscriber);
+            }
+        }
+    }
+
+    private void close(UUID workspaceId, Subscriber subscriber) {
+        if (!unregister(workspaceId, subscriber)) return;
         try {
-            emitter.send(event);
-        } catch (IOException | IllegalStateException exception) {
-            remove(workspaceId, emitter);
-            emitter.complete();
+            subscriber.emitter.complete();
+        } catch (IllegalStateException ignored) {
+            // A disconnected servlet may already have completed its async error lifecycle.
         }
     }
 
-    private void remove(UUID workspaceId, SseEmitter emitter) {
-        Set<SseEmitter> emitters = emittersByWorkspace.get(workspaceId);
-        if (emitters == null) {
-            return;
+    private boolean unregister(UUID workspaceId, Subscriber subscriber) {
+        synchronized (subscriber) {
+            if (subscriber.closed) return false;
+            subscriber.closed = true;
+            subscribers.computeIfPresent(workspaceId, (id, active) -> {
+                active.remove(subscriber);
+                return active.isEmpty() ? null : active;
+            });
+            return true;
         }
-        emitters.remove(emitter);
-        if (emitters.isEmpty()) {
-            emittersByWorkspace.remove(workspaceId, emitters);
+    }
+
+    private static final class Subscriber {
+        final SseEmitter emitter;
+        final SseSubscriptionAccess.Identity identity;
+        boolean closed;
+
+        Subscriber(SseEmitter emitter, SseSubscriptionAccess.Identity identity) {
+            this.emitter = emitter;
+            this.identity = identity;
         }
     }
 

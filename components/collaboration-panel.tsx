@@ -1,5 +1,7 @@
 "use client";
 
+import { useOperatorAccess } from "@/components/operator-access";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquareText, Send, UserRoundCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -10,6 +12,7 @@ import { useTaskStore } from "@/store/task-store";
 const commandKey = (operation: string) => `${operation}-${crypto.randomUUID()}`;
 
 export function CollaborationPanel() {
+  const { canWrite } = useOperatorAccess();
   const tasks = useTaskStore((state) => state.tasks);
   const [taskId, setTaskId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
@@ -52,7 +55,7 @@ export function CollaborationPanel() {
 
   const submitComment = (event: FormEvent) => {
     event.preventDefault();
-    if (comment.trim() && !addComment.isPending) addComment.mutate();
+    if (canWrite && comment.trim() && !addComment.isPending) addComment.mutate();
   };
 
   return (
@@ -77,7 +80,7 @@ export function CollaborationPanel() {
             <option value="">Select workspace member</option>
             {overview.data?.members.map((member) => <option key={member.id} value={member.id}>{member.name} · {member.role}</option>)}
           </select>
-          <button disabled={!assigneeId || !selectedTask || assignment.isPending} onClick={() => assignment.mutate()} className="focus-ring mt-2 h-10 w-full rounded bg-foreground text-sm font-black text-background disabled:opacity-50">Commit assignment</button>
+          <button disabled={!canWrite || !assigneeId || !selectedTask || assignment.isPending} onClick={() => assignment.mutate()} className="focus-ring mt-2 h-10 w-full rounded bg-foreground text-sm font-black text-background disabled:opacity-50">Commit assignment</button>
           {assignment.isError ? <p className="mt-2 text-xs font-bold text-red-600">Assignment rejected; refresh the task version and retry.</p> : null}
         </div>
 
@@ -89,7 +92,7 @@ export function CollaborationPanel() {
           </ol>
           <form onSubmit={submitComment} className="mt-3 grid grid-cols-[1fr_auto] gap-2">
             <label><span className="sr-only">Add task comment</span><input required maxLength={2000} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Record acceptance criteria or handoff context" className="focus-ring h-10 w-full rounded border border-line bg-panel-muted px-3 text-sm" /></label>
-            <button disabled={!effectiveTaskId || addComment.isPending} className="focus-ring flex h-10 items-center gap-2 rounded bg-accent px-4 text-sm font-black text-black"><Send size={15} /> Log</button>
+            <button disabled={!canWrite || !effectiveTaskId || addComment.isPending} className="focus-ring flex h-10 items-center gap-2 rounded bg-accent px-4 text-sm font-black text-black"><Send size={15} /> Log</button>
           </form>
         </div>
       </div>

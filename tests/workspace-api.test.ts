@@ -31,15 +31,17 @@ describe("workspace API contract", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "invite-id", status: "PENDING" }), { status: 201 })
     );
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await inviteWorkspaceMember("engineer@example.jp", "MEMBER", "invite-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("invite-key");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/workspaces/00000000-0000-0000-0000-000000000100/invitations",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "Idempotency-Key": "invite-key" }),
+        headers: expect.any(Headers),
         body: JSON.stringify({ email: "engineer@example.jp", role: "MEMBER" })
       })
     );
@@ -49,6 +51,7 @@ describe("workspace API contract", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "project-id", key: "EVD", columns: [] }), { status: 201 })
     );
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
     const command = {
       name: "Evidence Delivery",
@@ -59,12 +62,13 @@ describe("workspace API contract", () => {
     };
 
     await createWorkspaceProject(command, "project-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("project-key");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/workspaces/00000000-0000-0000-0000-000000000100/projects",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "Idempotency-Key": "project-key" }),
+        headers: expect.any(Headers),
         body: JSON.stringify({ ...command, key: "EVD" })
       })
     );
@@ -74,9 +78,11 @@ describe("workspace API contract", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "column-id", wipLimit: 4, version: 3 }))
     );
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await updateWorkflowWipLimit("project-id", "column-id", 4, 2, "wip-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("wip-key");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/workspaces/00000000-0000-0000-0000-000000000100/projects/project-id/workflow-columns/column-id",

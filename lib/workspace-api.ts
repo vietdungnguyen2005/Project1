@@ -1,3 +1,4 @@
+import { operatorFetch } from "@/lib/operator-session";
 import { DEMO_WORKSPACE_ID } from "@/lib/vcore-config";
 
 export type WorkspaceMember = {
@@ -60,7 +61,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchWorkspaceOverview(signal?: AbortSignal) {
-  const response = await fetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/overview`, {
+  const response = await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/overview`, {
     signal,
     headers: { Accept: "application/json" }
   });
@@ -72,7 +73,7 @@ export async function inviteWorkspaceMember(
   role: WorkspaceInvitation["role"],
   idempotencyKey: string
 ) {
-  const response = await fetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/invitations`, {
+  const response = await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/invitations`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -88,7 +89,7 @@ export async function createWorkspaceProject(
   command: CreateProjectCommand,
   idempotencyKey: string
 ) {
-  const response = await fetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/projects`, {
+  const response = await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/projects`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -107,7 +108,7 @@ export async function updateWorkflowWipLimit(
   expectedVersion: number,
   idempotencyKey: string
 ) {
-  const response = await fetch(
+  const response = await operatorFetch(
     `/api/workspaces/${DEMO_WORKSPACE_ID}/projects/${encodeURIComponent(projectId)}/workflow-columns/${encodeURIComponent(columnId)}`,
     {
       method: "PATCH",

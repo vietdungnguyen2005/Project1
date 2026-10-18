@@ -18,6 +18,7 @@ import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { useTaskCloudSync } from "@/hooks/use-task-cloud-sync";
 import { useTaskStore } from "@/store/task-store";
 import { formatTaskTimestamp } from "@/lib/date-time";
+import { useOperatorAccess } from "@/components/operator-access";
 
 const priorityStyles: Record<TaskPriority, string> = {
   critical: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200",
@@ -34,6 +35,7 @@ const columnIcon: Record<TaskStatus, ReactNode> = {
 };
 
 export function KanbanBoard() {
+  const { canWrite } = useOperatorAccess();
   const tasks = useTaskStore((state) => state.tasks);
   const moveTask = useTaskStore((state) => state.moveTask);
   const lastInteractionMs = useTaskStore((state) => state.lastInteractionMs);
@@ -56,7 +58,7 @@ export function KanbanBoard() {
   );
 
   const handleDrop = (status: TaskStatus) => {
-    if (!draggingId) {
+    if (!canWrite || !draggingId) {
       return;
     }
 
@@ -105,6 +107,7 @@ export function KanbanBoard() {
                   : "Local cache"}
           </div>
           <button
+            disabled={!canWrite}
             onClick={() => setIsCreating((current) => !current)}
             className="focus-ring grid size-10 place-items-center rounded bg-accent text-black transition hover:-translate-y-0.5"
             aria-label={isCreating ? "Close task composer" : "Create task"}
@@ -116,7 +119,7 @@ export function KanbanBoard() {
       </div>
 
       <AnimatePresence initial={false}>
-        {isCreating ? (
+        {canWrite && isCreating ? (
           <TaskComposer
             ownerName={cloudSync.session?.user.name ?? "Demo Owner"}
             onDone={() => setIsCreating(false)}
@@ -320,6 +323,7 @@ type TaskCardProps = {
 };
 
 const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: TaskCardProps) {
+  const { canWrite } = useOperatorAccess();
   const updateTaskTitle = useTaskStore((state) => state.updateTaskTitle);
   const moveTask = useTaskStore((state) => state.moveTask);
   const isMutationPending = useTaskStore((state) => state.pendingTaskIds.includes(task.id));
@@ -328,7 +332,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
   const timestampLabel = formatTaskTimestamp(task.updatedAt);
   const hasAbsoluteTimestamp = !Number.isNaN(Date.parse(task.updatedAt));
   const debouncedSave = useDebouncedCallback((nextTitle: string) => {
-    updateTaskTitle(task.id, nextTitle);
+    if (canWrite) updateTaskTitle(task.id, nextTitle);
   }, 180);
 
   return (
@@ -338,8 +342,9 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
       animate={{ opacity: isDragging ? 0.55 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.18 }}
-      draggable={!isMutationPending}
+      draggable={canWrite && !isMutationPending}
       onDragStartCapture={(event) => {
+        if (!canWrite) { event.preventDefault(); return; }
         event.dataTransfer.effectAllowed = "move";
         setDraggingId(task.id);
       }}
@@ -356,21 +361,21 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
             </span>
           </div>
 
-          {isEditing ? (
+          {canWrite && isEditing ? (
             <label className="mt-3 block">
               <span className="sr-only">Edit task title</span>
               <textarea
                 value={title}
                 rows={2}
                 autoFocus
-                disabled={isMutationPending}
+                disabled={!canWrite || isMutationPending}
                 onChange={(event) => {
                   const nextTitle = event.target.value;
                   setTitle(nextTitle);
                   debouncedSave(nextTitle);
                 }}
                 onBlur={() => {
-                  updateTaskTitle(task.id, title);
+                  if (canWrite) updateTaskTitle(task.id, title);
                   setIsEditing(false);
                 }}
                 className="focus-ring w-full resize-none rounded border border-line bg-panel-muted p-2 text-sm font-bold leading-5"
@@ -378,6 +383,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
             </label>
           ) : (
             <button
+              disabled={!canWrite}
               onClick={() => {
                 setTitle(task.title);
                 setIsEditing(true);
@@ -403,7 +409,7 @@ const TaskCard = memo(function TaskCard({ task, isDragging, setDraggingId }: Tas
             <select
               value={task.status}
               aria-label={`Move task ${task.title}`}
-              disabled={isMutationPending}
+              disabled={!canWrite || isMutationPending}
               onChange={(event) => {
                 const nextStatus = event.target.value as TaskStatus;
                 moveTask(task.id, nextStatus);

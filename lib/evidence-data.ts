@@ -20,7 +20,7 @@ export const evidenceItems = [
   {
     id: "tenant-security",
     label: "Tenant security",
-    claim: "Browser-supplied identity headers are removed before the trusted BFF identity is injected.",
+    claim: "Browser email headers do not grant identity; write access requires a verified session.",
     result: "Untrusted direct backend identity returns 401; membership scopes every query.",
     proof: "Worker + Spring Security tests",
     href: `${repository}/blob/main/tests/cloudflare-worker.test.js`

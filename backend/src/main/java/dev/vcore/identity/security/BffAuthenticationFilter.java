@@ -10,7 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.http.HttpHeaders;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -19,7 +19,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class BffAuthenticationFilter extends OncePerRequestFilter {
 
     static final String BFF_KEY_HEADER = "X-VCore-Bff-Key";
-    static final String USER_EMAIL_HEADER = "X-VCore-User-Email";
 
     private final SecurityProperties securityProperties;
     private final UserIdentityLookup userIdentityLookup;
@@ -30,19 +29,36 @@ public class BffAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !request.getRequestURI().startsWith("/api/");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String suppliedKey = request.getHeader(BFF_KEY_HEADER);
-        String email = request.getHeader(USER_EMAIL_HEADER);
-
-        if (isTrusted(suppliedKey) && email != null && !email.isBlank()) {
-            userIdentityLookup.findByEmail(email).ifPresent(user -> {
-                var authentication = UsernamePasswordAuthenticationToken.authenticated(user, null, java.util.List.of());
+        if (!isTrusted(suppliedKey)) {
+            response.setStatus(401);
+            response.setContentType("application/problem+json");
+            response.getWriter()
+                    .write("{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"Trusted BFF required.\"}");
+            return;
+        }
+        if (SecurityContextHolder.getContext().getAuthentication() == null
+                && securityProperties.demoReadEnabled()
+                && "GET".equals(request.getMethod())
+                && !request.getRequestURI().startsWith("/api/auth/")) {
+            userIdentityLookup.findByEmail("viewer@v-core.local").ifPresent(user -> {
+                var authentication = new AnonymousAuthenticationToken(
+                        "vcore-public-read-only",
+                        user,
+                        java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                "ROLE_DEMO_VIEWER")));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             });
         }
 
-        response.setHeader(HttpHeaders.VARY, BFF_KEY_HEADER + ", " + USER_EMAIL_HEADER);
+        response.setHeader(HttpHeaders.VARY, BFF_KEY_HEADER + ", Cookie");
         filterChain.doFilter(request, response);
     }
 

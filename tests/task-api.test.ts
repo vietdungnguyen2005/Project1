@@ -70,15 +70,18 @@ describe("task API contract", () => {
       updatedAt: "2026-08-09T10:00:00Z"
     } satisfies Task;
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(responseTask), { status: 201 }));
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await createCloudTask(draft, "create-task-test-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("create-task-test-key");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("X-CSRF-TOKEN")).toBe("test-csrf");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/workspaces/00000000-0000-0000-0000-000000000100/projects/00000000-0000-0000-0000-000000000200/tasks",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "Idempotency-Key": "create-task-test-key" }),
+        headers: expect.any(Headers),
         body: JSON.stringify(toCreateTaskCommand(draft))
       })
     );

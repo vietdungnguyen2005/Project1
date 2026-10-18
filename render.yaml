@@ -23,6 +23,14 @@ services:
         sync: false
       - key: DEPLOYMENT_ENVIRONMENT
         value: production
+      - key: VCORE_DEMO_READ_ENABLED
+        value: "true"
+      - key: AUTH_SECURE_COOKIE
+        value: "true"
+      - key: AUTH_BOOTSTRAP_USERNAME
+        sync: false
+      - key: AUTH_BOOTSTRAP_PASSWORD_HASH
+        sync: false
       - key: DB_MAX_POOL_SIZE
         value: "5"
       - key: DB_MIN_IDLE

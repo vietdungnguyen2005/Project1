@@ -1,4 +1,8 @@
 spring:
+  session:
+    timeout: 15m
+    jdbc:
+      initialize-schema: never
   application:
     name: v-core-backend
   autoconfigure:
@@ -80,6 +84,7 @@ info:
 vcore:
   security:
     bff-shared-secret: ${VCORE_BFF_SHARED_SECRET:}
+    demo-read-enabled: ${VCORE_DEMO_READ_ENABLED:false}
 
 springdoc:
   api-docs:

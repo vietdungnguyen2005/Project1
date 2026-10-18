@@ -6,6 +6,7 @@ test("mobile users can create and move tasks without native drag", async ({ page
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname === "/api/auth/session") return route.fulfill({ json: { authenticated: true, username: "owner@v-core.local", roles: ["ROLE_OPERATOR"], csrfToken: "fixture-csrf" } });
 
     if (url.pathname === "/api/session") {
       return route.fulfill({
@@ -107,6 +108,11 @@ test("owners can operate the workspace and inspect recruiter-facing evidence", a
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname === "/api/auth/session") return route.fulfill({ json: { authenticated: true, username: "owner@v-core.local", roles: ["ROLE_OPERATOR"], csrfToken: "fixture-csrf" } });
+    if (url.pathname === "/api/session") return route.fulfill({ json: {
+      user: { id: "owner-id", email: "owner@v-core.local", name: "Demo Owner" },
+      workspaces: [{ id: "workspace-id", name: "V-Core", slug: "v-core", role: "OWNER" }]
+    } });
     if (request.method() === "GET" && url.pathname.endsWith("/overview")) {
       return route.fulfill({
         json: {
@@ -150,6 +156,7 @@ test("long active task titles do not widen the mobile viewport", async ({ page }
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname === "/api/auth/session") return route.fulfill({ json: { authenticated: true, username: "owner@v-core.local", roles: ["ROLE_OPERATOR"], csrfToken: "fixture-csrf" } });
     if (url.pathname === "/api/session") {
       return route.fulfill({
         json: {

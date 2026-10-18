@@ -196,6 +196,19 @@ public class WorkspaceOperationsService {
                     "The workflow changed after it was loaded. Current version is " + current.version() + ".");
         }
 
+        long occupancy = jdbcClient
+                .sql(
+                        "SELECT COUNT(*) FROM task WHERE workspace_id = :workspaceId AND project_id = :projectId AND column_id = :columnId")
+                .param("workspaceId", workspaceId)
+                .param("projectId", projectId)
+                .param("columnId", columnId)
+                .query(Long.class)
+                .single();
+        if (wipLimit != null && occupancy > wipLimit) {
+            throw new ApiConflictException(
+                    "The WIP limit cannot be lower than the current task count of " + occupancy + ".");
+        }
+
         jdbcClient
                 .sql("""
                         UPDATE workflow_column

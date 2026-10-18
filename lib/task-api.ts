@@ -1,3 +1,4 @@
+import { operatorFetch } from "@/lib/operator-session";
 import type { ActivityItem, SessionUser, Task, TaskDraft, TaskStatus } from "@/lib/types";
 import { DEMO_PROJECT_ID, DEMO_WORKSPACE_ID, WORKFLOW_COLUMN_IDS } from "@/lib/vcore-config";
 
@@ -128,7 +129,7 @@ const jsonHeaders = (idempotencyKey?: string) => ({
 });
 
 export async function fetchCloudSession(signal?: AbortSignal) {
-  const response = await fetch("/api/session", {
+  const response = await operatorFetch("/api/session", {
     signal,
     headers: { Accept: "application/json" }
   });
@@ -153,7 +154,7 @@ export async function fetchCloudSession(signal?: AbortSignal) {
 }
 
 export async function fetchCloudTasks(signal?: AbortSignal) {
-  const response = await fetch(taskCollectionUrl, {
+  const response = await operatorFetch(taskCollectionUrl, {
     signal,
     headers: { Accept: "application/json" }
   });
@@ -167,7 +168,7 @@ export async function fetchCloudTasks(signal?: AbortSignal) {
 }
 
 export async function fetchCloudActivities(signal?: AbortSignal) {
-  const response = await fetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/activities?limit=20`, {
+  const response = await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/activities?limit=20`, {
     signal,
     headers: { Accept: "application/json" }
   });
@@ -176,7 +177,7 @@ export async function fetchCloudActivities(signal?: AbortSignal) {
 }
 
 export async function createCloudTask(draft: TaskDraft, idempotencyKey: string) {
-  const response = await fetch(taskCollectionUrl, {
+  const response = await operatorFetch(taskCollectionUrl, {
     method: "POST",
     headers: jsonHeaders(idempotencyKey),
     body: JSON.stringify(toCreateTaskCommand(draft))
@@ -190,7 +191,7 @@ export async function moveCloudTask(
   status: TaskStatus,
   idempotencyKey: string
 ) {
-  const response = await fetch(`${taskCollectionUrl}/${encodeURIComponent(task.id)}/moves`, {
+  const response = await operatorFetch(`${taskCollectionUrl}/${encodeURIComponent(task.id)}/moves`, {
     method: "POST",
     headers: jsonHeaders(idempotencyKey),
     body: JSON.stringify(toMoveTaskCommand(task, status))
@@ -200,7 +201,7 @@ export async function moveCloudTask(
 }
 
 export async function renameCloudTask(task: Task, title: string, idempotencyKey: string) {
-  const response = await fetch(`${taskCollectionUrl}/${encodeURIComponent(task.id)}`, {
+  const response = await operatorFetch(`${taskCollectionUrl}/${encodeURIComponent(task.id)}`, {
     method: "PATCH",
     headers: jsonHeaders(idempotencyKey),
     body: JSON.stringify({ title: title.trim(), expectedVersion: task.version })
