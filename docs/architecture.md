@@ -23,6 +23,8 @@ The browser only calls `/api`. In hosted environments the Cloudflare Worker forw
 
 Project creation provisions an active sprint and a four-column workflow in one transaction. Workflow-limit changes use optimistic versions; task assignment and comments reuse the same tenant and idempotency boundaries as board commands.
 
+An optional workflow template ID selects an immutable, workspace-scoped published revision (V7). Publishing validates the complete definition before activation; provisioning copies its ordered columns and provenance in the existing project/sprint/audit/outbox/idempotency transaction. No ID preserves original defaults. New revisions never remap an active project. The existing operations screen gains a synthetic scenario picker and a selected-project workbench; task commands still use the same Java services and actual column IDs. See [customer delivery design](fde/solution-design.md) for API contracts, concurrency and explicit exclusions.
+
 Modules communicate through public application services and domain events. Controllers do not access repositories directly. Persistence entities do not leave the backend boundary.
 
 ## Consistency rules

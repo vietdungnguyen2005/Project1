@@ -65,7 +65,8 @@ public class WorkspaceOperationsController {
                 request.key(),
                 request.description(),
                 request.sprintName(),
-                request.sprintGoal());
+                request.sprintGoal(),
+                request.workflowTemplateId());
     }
 
     @PatchMapping("/projects/{projectId}/workflow-columns/{columnId}")
@@ -92,7 +93,8 @@ public class WorkspaceOperationsController {
 
             @NotNull @Size(max = 2000) String description,
             @NotBlank @Size(max = 120) String sprintName,
-            @NotBlank @Size(max = 2000) String sprintGoal) {}
+            @NotBlank @Size(max = 2000) String sprintGoal,
+            UUID workflowTemplateId) {}
 
     record UpdateWipRequest(
             @NotNull @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer wipLimit,

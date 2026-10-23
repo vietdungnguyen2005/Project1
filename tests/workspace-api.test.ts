@@ -3,10 +3,24 @@ import {
   createWorkspaceProject,
   fetchWorkspaceOverview,
   inviteWorkspaceMember,
+  publishWorkflowTemplate,
   updateWorkflowWipLimit
 } from "@/lib/workspace-api";
 
 describe("workspace API contract", () => {
+  it("publishes a versioned workspace template using the caller's retry key", async () => {
+    const definition = { key: "CLIENT_A", version: 1, name: "Synthetic client A", scenario: "CLIENT_A" as const, columns: [
+      { name: "BACKLOG", category: "BACKLOG" as const, position: 0, wipLimit: null },
+      { name: "DONE", category: "DONE" as const, position: 1, wipLimit: null }
+    ] };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "revision-id", ...definition, synthetic: true }, { status: 201 }));
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(publishWorkflowTemplate(definition, "publish-stable-key")).resolves.toMatchObject({ id: "revision-id", synthetic: true });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspaces/00000000-0000-0000-0000-000000000100/workflow-templates");
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("publish-stable-key");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual(definition);
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });

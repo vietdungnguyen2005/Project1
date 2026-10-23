@@ -18,6 +18,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.tsbuildinfo
+__pycache__/
 .terraform/
 *.tfstate
 *.tfstate.*

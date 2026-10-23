@@ -22,16 +22,19 @@ public class WorkspaceOperationsService {
     private final WorkspaceAccessService workspaceAccessService;
     private final IdempotencyService idempotencyService;
     private final WorkspaceEventRecorder eventRecorder;
+    private final WorkflowTemplateService workflowTemplates;
 
     public WorkspaceOperationsService(
             JdbcClient jdbcClient,
             WorkspaceAccessService workspaceAccessService,
             IdempotencyService idempotencyService,
-            WorkspaceEventRecorder eventRecorder) {
+            WorkspaceEventRecorder eventRecorder,
+            WorkflowTemplateService workflowTemplates) {
         this.jdbcClient = jdbcClient;
         this.workspaceAccessService = workspaceAccessService;
         this.idempotencyService = idempotencyService;
         this.eventRecorder = eventRecorder;
+        this.workflowTemplates = workflowTemplates;
     }
 
     @Transactional(readOnly = true)
@@ -92,32 +95,45 @@ public class WorkspaceOperationsService {
             String rawKey,
             String rawDescription,
             String rawSprintName,
-            String rawSprintGoal) {
+            String rawSprintGoal,
+            UUID workflowTemplateId) {
         workspaceAccessService.requireAdministrationAccess(user.id(), workspaceId);
         String name = rawName.strip();
         String key = rawKey.strip().toUpperCase(Locale.ROOT);
         String description = rawDescription.strip();
         String sprintName = rawSprintName.strip();
         String sprintGoal = rawSprintGoal.strip();
-        String requestHash = RequestHash.sha256(
-                workspaceId + "|" + name + "|" + key + "|" + description + "|" + sprintName + "|" + sprintGoal);
+        String canonical =
+                workspaceId + "|" + name + "|" + key + "|" + description + "|" + sprintName + "|" + sprintGoal;
+        if (workflowTemplateId != null) {
+            canonical = "project.template-create.v1|" + workspaceId + "|" + workflowTemplateId + "|"
+                    + java.util.stream.Stream.of(name, key, description, sprintName, sprintGoal)
+                            .map(field -> field.length() + ":" + field)
+                            .collect(java.util.stream.Collectors.joining());
+        }
+        String requestHash = RequestHash.sha256(canonical);
         var replay = idempotencyService.beginOrReplay(workspaceId, idempotencyKey, requestHash, ProjectView.class);
         if (replay.isPresent()) {
             return replay.get();
         }
 
+        var template = workflowTemplateId == null ? null : workflowTemplates.resolve(workspaceId, workflowTemplateId);
+        if (template != null)
+            workflowTemplates.validate(new WorkflowTemplateService.Definition(
+                    template.key(), template.version(), template.name(), template.scenario(), template.columns()));
         UUID projectId = UUID.randomUUID();
         UUID sprintId = UUID.randomUUID();
         jdbcClient
                 .sql("""
-                        INSERT INTO project (id, workspace_id, name, project_key, description)
-                        VALUES (:id, :workspaceId, :name, :key, :description)
+                        INSERT INTO project (id, workspace_id, name, project_key, description, workflow_template_id)
+                        VALUES (:id, :workspaceId, :name, :key, :description, :templateId)
                         """)
                 .param("id", projectId)
                 .param("workspaceId", workspaceId)
                 .param("name", name)
                 .param("key", key)
                 .param("description", description)
+                .param("templateId", workflowTemplateId)
                 .update();
         jdbcClient
                 .sql("""
@@ -131,10 +147,16 @@ public class WorkspaceOperationsService {
                 .param("goal", sprintGoal)
                 .update();
 
-        createColumn(workspaceId, projectId, "Backlog", "BACKLOG", 0, null);
-        createColumn(workspaceId, projectId, "In progress", "IN_PROGRESS", 1, 3);
-        createColumn(workspaceId, projectId, "Review", "IN_PROGRESS", 2, 2);
-        createColumn(workspaceId, projectId, "Done", "DONE", 3, null);
+        if (template == null) {
+            createColumn(workspaceId, projectId, "Backlog", "BACKLOG", 0, null);
+            createColumn(workspaceId, projectId, "In progress", "IN_PROGRESS", 1, 3);
+            createColumn(workspaceId, projectId, "Review", "IN_PROGRESS", 2, 2);
+            createColumn(workspaceId, projectId, "Done", "DONE", 3, null);
+        } else {
+            for (var column : template.columns())
+                createColumn(
+                        workspaceId, projectId, column.name(), column.category(), column.position(), column.wipLimit());
+        }
 
         ProjectView result = new ProjectView(
                 projectId,
@@ -142,7 +164,8 @@ public class WorkspaceOperationsService {
                 key,
                 description,
                 new SprintView(sprintId, sprintName, sprintGoal, "ACTIVE"),
-                columns(workspaceId, projectId));
+                columns(workspaceId, projectId),
+                workflowTemplateId);
         eventRecorder.record(
                 workspaceId,
                 user.id(),
@@ -150,7 +173,21 @@ public class WorkspaceOperationsService {
                 projectId,
                 "PROJECT_CREATED",
                 "project.created.v1",
-                java.util.Map.of("key", key, "sprintId", sprintId),
+                template == null
+                        ? java.util.Map.of("key", key, "sprintId", sprintId)
+                        : java.util.Map.of(
+                                "key",
+                                key,
+                                "sprintId",
+                                sprintId,
+                                "workflowTemplateId",
+                                template.id(),
+                                "templateKey",
+                                template.key(),
+                                "templateVersion",
+                                template.version(),
+                                "synthetic",
+                                true),
                 Instant.now());
         idempotencyService.complete(workspaceId, idempotencyKey, 201, result);
         return result;
@@ -295,7 +332,7 @@ public class WorkspaceOperationsService {
     private List<ProjectView> projects(UUID workspaceId) {
         return jdbcClient
                 .sql("""
-                        SELECT project.id, project.name, project.project_key, project.description,
+                        SELECT project.id, project.name, project.project_key, project.description, project.workflow_template_id,
                                sprint.id AS sprint_id, sprint.name AS sprint_name,
                                sprint.goal AS sprint_goal, sprint.status AS sprint_status
                         FROM project
@@ -323,7 +360,8 @@ public class WorkspaceOperationsService {
                             row.getString("project_key"),
                             row.getString("description"),
                             sprint,
-                            columns(workspaceId, projectId));
+                            columns(workspaceId, projectId),
+                            row.getObject("workflow_template_id", UUID.class));
                 })
                 .list();
     }
@@ -352,7 +390,13 @@ public class WorkspaceOperationsService {
             List<ProjectView> projects, List<MemberView> members, List<InvitationView> invitations) {}
 
     public record ProjectView(
-            UUID id, String name, String key, String description, SprintView activeSprint, List<ColumnView> columns) {}
+            UUID id,
+            String name,
+            String key,
+            String description,
+            SprintView activeSprint,
+            List<ColumnView> columns,
+            UUID workflowTemplateId) {}
 
     public record SprintView(UUID id, String name, String goal, String status) {}
 

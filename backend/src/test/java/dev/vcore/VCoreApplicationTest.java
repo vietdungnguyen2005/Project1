@@ -47,6 +47,487 @@ import org.testcontainers.utility.DockerImageName;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class VCoreApplicationTest {
     @Test
+    void templatedProjectFingerprintCannotConfuseDelimitersInDifferentFields() throws Exception {
+        var template = fdePublish(fdePreset(0));
+        var command = fdeProject("HASHSAFE", template.get("id").asText())
+                .put("description", "first|second")
+                .put("sprintName", "third");
+        mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest())
+                        .header("Idempotency-Key", "framed-project-hash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(command.toString()))
+                .andExpect(status().isCreated());
+        command.put("description", "first").put("sprintName", "second|third");
+        mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest())
+                        .header("Idempotency-Key", "framed-project-hash")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(command.toString()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void concurrentPublicationOfTheSameRevisionHasOneWinnerWithoutMixedColumns() throws Exception {
+        var original = fdePreset(0);
+        var alternative = original.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode)
+                        alternative.get("columns").get(1))
+                .put("wipLimit", 7);
+        var authA = ownerRequest();
+        var authB = ownerRequest();
+        var gate = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var requests = java.util.List.of(original, alternative);
+            var auth = java.util.List.of(authA, authB);
+            var results = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+            for (int i = 0; i < 2; i++) {
+                final int index = i;
+                results.add(pool.submit(() -> {
+                    gate.await();
+                    return mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                                    .header("X-VCore-Bff-Key", BFF_SECRET)
+                                    .with(auth.get(index))
+                                    .header("Idempotency-Key", "publish-race-" + index)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(requests.get(index).toString()))
+                            .andReturn()
+                            .getResponse()
+                            .getStatus();
+                }));
+            }
+            gate.countDown();
+            assertThat(java.util.List.of(
+                            results.get(0).get(10, java.util.concurrent.TimeUnit.SECONDS),
+                            results.get(1).get(10, java.util.concurrent.TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(201, 409);
+        }
+        var jdbc = JdbcClient.create(dataSource);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM workflow_template WHERE template_key=:key")
+                        .param("key", original.get("key").asText())
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+        String definition = jdbc.sql("SELECT definition::text FROM workflow_template WHERE template_key=:key")
+                .param("key", original.get("key").asText())
+                .query(String.class)
+                .single();
+        int limit = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(definition)
+                .get(1)
+                .get("wipLimit")
+                .asInt();
+        assertThat(limit).isIn(3, 7);
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(definition)
+                        .size())
+                .isEqualTo(4);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_record WHERE idempotency_key LIKE 'publish-race-%'")
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode fdePreset(int index) throws Exception {
+        var result = mockMvc.perform(get("/api/workspaces/{w}/workflow-presets", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        var definition =
+                (com.fasterxml.jackson.databind.node.ObjectNode) new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(result)
+                        .get(index);
+        return definition.put(
+                "key",
+                "TEST_"
+                        + java.util
+                                .UUID
+                                .randomUUID()
+                                .toString()
+                                .replace("-", "")
+                                .toUpperCase(java.util.Locale.ROOT));
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode fdePublish(com.fasterxml.jackson.databind.JsonNode definition)
+            throws Exception {
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                                .header("X-VCore-Bff-Key", BFF_SECRET)
+                                .with(ownerRequest())
+                                .header(
+                                        "Idempotency-Key",
+                                        java.util.UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(definition.toString()))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString());
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode fdeProject(String key, String templateId) {
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+                .createObjectNode()
+                .put("name", "Synthetic " + key)
+                .put("key", key)
+                .put("description", "Synthetic demonstration only")
+                .put("sprintName", "Pilot")
+                .put("sprintGoal", "Verify workflow")
+                .put("workflowTemplateId", templateId);
+    }
+
+    @Test
+    void invalidWorkflowDefinitionsCannotActivateOrLeaveIdempotencyRecords() throws Exception {
+        var jdbc = JdbcClient.create(dataSource);
+        for (String invalid : List.of("wip", "position", "duplicate", "category", "terminal", "blank", "null")) {
+            var definition = fdePreset(0);
+            var first = (com.fasterxml.jackson.databind.node.ObjectNode)
+                    definition.get("columns").get(0);
+            switch (invalid) {
+                case "wip" -> first.put("wipLimit", 0);
+                case "position" -> first.put("position", 1);
+                case "duplicate" -> first.put("name", "review");
+                case "category" -> first.put("category", "APPROVAL");
+                case "terminal" ->
+                    ((com.fasterxml.jackson.databind.node.ObjectNode)
+                                    definition.get("columns").get(3))
+                            .put("category", "TODO");
+                case "blank" -> first.put("name", "   ");
+                case "null" ->
+                    ((com.fasterxml.jackson.databind.node.ArrayNode) definition.get("columns"))
+                            .set(0, com.fasterxml.jackson.databind.node.NullNode.instance);
+                default -> throw new IllegalStateException();
+            }
+            String key = "invalid-workflow-" + invalid;
+            mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", key)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(definition.toString()))
+                    .andExpect(status().isBadRequest());
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM workflow_template WHERE template_key=:key")
+                            .param("key", definition.get("key").asText())
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_record WHERE idempotency_key=:key")
+                            .param("key", key)
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+        }
+    }
+
+    @Test
+    void templateMutationsRequireLoginAndWorkspaceAdministration() throws Exception {
+        var definition = fdePreset(0);
+        mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .header("Idempotency-Key", "anonymous-template")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(definition.toString()))
+                .andExpect(status().isUnauthorized());
+        var request = ownerRequest();
+        var jdbc = JdbcClient.create(dataSource);
+        jdbc.sql(
+                        "UPDATE workspace_membership SET role='VIEWER' WHERE workspace_id=:w AND user_id=(SELECT id FROM app_user WHERE email=:e)")
+                .param("w", java.util.UUID.fromString(WORKSPACE_ID))
+                .param("e", OWNER_EMAIL)
+                .update();
+        try {
+            mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(request)
+                            .header("Idempotency-Key", "viewer-template")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(definition.toString()))
+                    .andExpect(status().isForbidden());
+        } finally {
+            jdbc.sql(
+                            "UPDATE workspace_membership SET role='OWNER' WHERE workspace_id=:w AND user_id=(SELECT id FROM app_user WHERE email=:e)")
+                    .param("w", java.util.UUID.fromString(WORKSPACE_ID))
+                    .param("e", OWNER_EMAIL)
+                    .update();
+        }
+    }
+
+    @Test
+    void templatesCannotBeReadOrAppliedAcrossWorkspaceBoundaries() throws Exception {
+        var jdbc = JdbcClient.create(dataSource);
+        var other = java.util.UUID.randomUUID();
+        jdbc.sql(
+                        "INSERT INTO workspace(id,name,slug,created_by) VALUES(:id,'Synthetic tenant B',:slug,(SELECT id FROM app_user WHERE email=:e))")
+                .param("id", other)
+                .param("slug", "synthetic-" + other)
+                .param("e", OWNER_EMAIL)
+                .update();
+        try {
+            mockMvc.perform(get("/api/workspaces/{w}/workflow-templates", other)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest()))
+                    .andExpect(status().isForbidden());
+            var definition = fdePreset(1);
+            mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", other)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", "cross-tenant-write")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(definition.toString()))
+                    .andExpect(status().isForbidden());
+            jdbc.sql(
+                            "INSERT INTO workspace_membership(workspace_id,user_id,role) SELECT :w,id,'OWNER' FROM app_user WHERE email=:e")
+                    .param("w", other)
+                    .param("e", OWNER_EMAIL)
+                    .update();
+            String response = mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", other)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", "tenant-b-template")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(definition.toString()))
+                    .andExpect(status().isCreated())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString();
+            String id = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(response)
+                    .get("id")
+                    .asText();
+            mockMvc.perform(get("/api/workspaces/{w}/workflow-templates/{id}", WORKSPACE_ID, id)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest()))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", "apply-foreign-template")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(fdeProject("FOREIGN", id).toString()))
+                    .andExpect(status().isNotFound());
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM project WHERE project_key='FOREIGN'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+        } finally {
+            jdbc.sql("DELETE FROM workspace WHERE id=:id").param("id", other).update();
+        }
+    }
+
+    @Test
+    void publishingANewRevisionNeverRemapsExistingProjectsAndPublicationIsRetrySafe() throws Exception {
+        var definition = fdePreset(1);
+        var published = fdePublish(definition);
+        // Retry the same request key from the durable record; actor and key stay scoped to this workspace.
+        String operationKey = JdbcClient.create(dataSource)
+                .sql("SELECT idempotency_key FROM idempotency_record WHERE response_body->>'id'=:id")
+                .param("id", published.get("id").asText())
+                .query(String.class)
+                .single();
+        String retry = mockMvc.perform(post("/api/workspaces/{w}/workflow-templates", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest())
+                        .header("Idempotency-Key", operationKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(definition.toString()))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().readTree(retry))
+                .isEqualTo(published);
+        var command = fdeProject("PINNED", published.get("id").asText());
+        String original = mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest())
+                        .header("Idempotency-Key", "pinned-project")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(command.toString()))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        definition.put("version", 2);
+        ((com.fasterxml.jackson.databind.node.ObjectNode)
+                        definition.get("columns").get(1))
+                .put("wipLimit", 9);
+        fdePublish(definition);
+        var project = new com.fasterxml.jackson.databind.ObjectMapper().readTree(original);
+        var overview = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(mockMvc.perform(get("/api/workspaces/{w}/overview", WORKSPACE_ID)
+                                .header("X-VCore-Bff-Key", BFF_SECRET)
+                                .with(ownerRequest()))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString());
+        var pinned = java.util.stream.StreamSupport.stream(
+                        overview.get("projects").spliterator(), false)
+                .filter(p -> p.get("id").equals(project.get("id")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(pinned.get("columns").get(1).get("wipLimit").asInt()).isEqualTo(2);
+        assertThat(JdbcClient.create(dataSource)
+                        .sql(
+                                "SELECT COUNT(*) FROM activity WHERE aggregate_id=:id AND action='WORKFLOW_TEMPLATE_PUBLISHED'")
+                        .param(
+                                "id",
+                                java.util.UUID.fromString(published.get("id").asText()))
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void concurrentProjectRetriesCreateOneCompleteWorkflowAndOneAudit() throws Exception {
+        var published = fdePublish(fdePreset(0));
+        var command = fdeProject("CONCURRENT", published.get("id").asText());
+        var first = ownerRequest();
+        var second = ownerRequest();
+        var gate = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var futures = List.of(first, second).stream()
+                    .map(auth -> pool.submit(() -> {
+                        gate.await();
+                        return mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                                        .with(auth)
+                                        .header("Idempotency-Key", "concurrent-templated-project")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(command.toString()))
+                                .andExpect(status().isCreated())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString();
+                    }))
+                    .toList();
+            gate.countDown();
+            assertThat(futures.get(0).get(10, java.util.concurrent.TimeUnit.SECONDS))
+                    .isEqualTo(futures.get(1).get(10, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        var jdbc = JdbcClient.create(dataSource);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM project WHERE project_key='CONCURRENT'")
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql(
+                                "SELECT COUNT(*) FROM workflow_column WHERE project_id=(SELECT id FROM project WHERE project_key='CONCURRENT')")
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(4);
+        assertThat(jdbc.sql(
+                                "SELECT COUNT(*) FROM activity WHERE aggregate_id=(SELECT id FROM project WHERE project_key='CONCURRENT') AND action='PROJECT_CREATED'")
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void failureAfterSomeWorkflowColumnsRollsBackProjectSprintAuditAndRetryRecord() throws Exception {
+        var definition = fdePreset(1);
+        ((com.fasterxml.jackson.databind.node.ObjectNode)
+                        definition.get("columns").get(2))
+                .put("name", "FDE_ROLLBACK");
+        var published = fdePublish(definition);
+        var jdbc = JdbcClient.create(dataSource);
+        jdbc.sql(
+                        "CREATE FUNCTION fde_reject_column() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name='FDE_ROLLBACK' THEN RAISE EXCEPTION 'synthetic rollback probe' USING ERRCODE='23514'; END IF; RETURN NEW; END $$")
+                .update();
+        jdbc.sql(
+                        "CREATE TRIGGER fde_reject_column BEFORE INSERT ON workflow_column FOR EACH ROW EXECUTE FUNCTION fde_reject_column()")
+                .update();
+        try {
+            mockMvc.perform(post("/api/workspaces/{w}/projects", WORKSPACE_ID)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", "rollback-template-project")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(fdeProject("ROLLBACK", published.get("id").asText())
+                                    .toString()))
+                    .andExpect(status().isConflict());
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM project WHERE project_key='ROLLBACK'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM sprint WHERE project_id NOT IN (SELECT id FROM project)")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql(
+                                    "SELECT COUNT(*) FROM idempotency_record WHERE idempotency_key='rollback-template-project'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql(
+                                    "SELECT COUNT(*) FROM activity WHERE action='PROJECT_CREATED' AND details->>'key'='ROLLBACK'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+            assertThat(jdbc.sql(
+                                    "SELECT COUNT(*) FROM outbox_event WHERE event_type='project.created.v1' AND payload->>'key'='ROLLBACK'")
+                            .query(Long.class)
+                            .single())
+                    .isZero();
+        } finally {
+            jdbc.sql("DROP TRIGGER fde_reject_column ON workflow_column").update();
+            jdbc.sql("DROP FUNCTION fde_reject_column()").update();
+        }
+    }
+
+    @Test
+    void customerTemplatesProvisionDistinctWorkflowsWithoutChangingDefaultProvisioning() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var presets = mapper.readTree(mockMvc.perform(get("/api/workspaces/{workspace}/workflow-presets", WORKSPACE_ID)
+                        .header("X-VCore-Bff-Key", BFF_SECRET)
+                        .with(ownerRequest()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(presets.size()).isEqualTo(2);
+        for (int i = 0; i < 2; i++) {
+            var definition = presets.get(i).deepCopy();
+            var published =
+                    mapper.readTree(mockMvc.perform(post("/api/workspaces/{workspace}/workflow-templates", WORKSPACE_ID)
+                                    .header("X-VCore-Bff-Key", BFF_SECRET)
+                                    .with(ownerRequest())
+                                    .header("Idempotency-Key", "publish-client-" + i)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(mapper.writeValueAsString(definition)))
+                            .andExpect(status().isCreated())
+                            .andExpect(jsonPath("$.synthetic").value(true))
+                            .andReturn()
+                            .getResponse()
+                            .getContentAsString());
+            var command = mapper.createObjectNode()
+                    .put("name", "Synthetic client " + i)
+                    .put("key", "CL" + i)
+                    .put("description", "Synthetic demonstration only")
+                    .put("sprintName", "Pilot")
+                    .put("sprintGoal", "Verify customer workflow")
+                    .put("workflowTemplateId", published.get("id").asText());
+            var project = mapper.readTree(mockMvc.perform(post("/api/workspaces/{workspace}/projects", WORKSPACE_ID)
+                            .header("X-VCore-Bff-Key", BFF_SECRET)
+                            .with(ownerRequest())
+                            .header("Idempotency-Key", "client-project-" + i)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(command)))
+                    .andExpect(status().isCreated())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString());
+            assertThat(project.get("workflowTemplateId").asText())
+                    .isEqualTo(published.get("id").asText());
+            assertThat(project.get("columns").get(0).get("name").asText()).isEqualTo(i == 0 ? "BACKLOG" : "RECEIVED");
+            assertThat(project.get("columns").get(1).get("wipLimit").asInt()).isEqualTo(i == 0 ? 3 : 2);
+        }
+    }
+
+    @Test
     void aReadOnlyAccountKeepsItsAuthorizedStreamButCannotBorrowAnotherIdentity() throws Exception {
         var authorized = ownerRequest();
         JdbcClient jdbc = JdbcClient.create(dataSource);

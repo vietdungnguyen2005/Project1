@@ -4,17 +4,19 @@ V-Core is a multi-tenant delivery workspace for small software teams. Its portfo
 
 ## Delivered user journey
 
-1. The BFF resolves a trusted demo identity and its workspace membership.
+1. The BFF forwards service trust and session/CSRF; Java resolves the authenticated identity or an explicitly enabled read-only demo viewer and checks current workspace membership.
 2. The user loads the seeded project, sprint, workflow columns, and tasks.
 3. The user searches, creates, renames, and moves tasks.
 4. The system rejects stale edits, enforces WIP limits under concurrency, and safely replays idempotent requests.
-5. Every accepted task change is visible in the activity log and invalidates connected clients through SSE.
+5. Accepted task changes are persisted in the activity log; SSE supplies best-effort invalidation hints, not guaranteed durable browser delivery.
 
 ## Delivered operations and collaboration slice
 
-- Cloudflare Access identity support with an explicit fixed demo identity fallback;
+- PostgreSQL-backed operator accounts, session/CSRF checks and an explicitly enabled public read-only viewer; caller email headers do not grant identity;
 - workspace roster and retry-safe invitations;
 - project creation with an initial active sprint and default workflow;
+- optional workspace-scoped published workflow revisions, copied atomically into new projects with provenance and audit;
+- synthetic software/operations scenario preview and a selected-project workbench using actual column IDs;
 - version-checked WIP-limit administration;
 - workspace-member assignment and retry-safe task comments;
 - recruiter-facing evidence center linked to executable proof.
@@ -51,5 +53,6 @@ A vertical slice is complete only when it has:
 - public AWS infrastructure;
 - production Kubernetes hosting;
 - billing, file uploads, and email delivery.
+- migration/remapping of active workflow tasks, custom approval transitions and project-specific membership administration.
 
 These are excluded until the core workflow is complete. Kubernetes remains a local/CI deployment proof, not an unnecessary runtime dependency.

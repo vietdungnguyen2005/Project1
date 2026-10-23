@@ -1,10 +1,13 @@
 "use client";
 
 import { useOperatorAccess } from "@/components/operator-access";
+import { WorkflowTemplatePicker } from "@/components/workflow-template-picker";
+import { ProjectWorkflowBoard } from "@/components/project-workflow-board";
+import { ApiProblemError } from "@/lib/task-api";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Loader2, Send, SlidersHorizontal, Users } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import {
   createWorkspaceProject,
   fetchWorkspaceOverview,
@@ -19,6 +22,10 @@ const commandKey = (operation: string) => `${operation}-${crypto.randomUUID()}`;
 export function WorkspaceOperations() {
   const { canAdmin } = useOperatorAccess();
   const queryClient = useQueryClient();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [pickerEpoch, setPickerEpoch] = useState(0);
+  const [projectUnconfirmed, setProjectUnconfirmed] = useState(false);
+  const projectAttempt = useRef<{ command: CreateProjectCommand; key: string } | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceInvitation["role"]>("MEMBER");
   const [projectDraft, setProjectDraft] = useState<CreateProjectCommand>({
@@ -45,10 +52,22 @@ export function WorkspaceOperations() {
     }
   });
   const createProject = useMutation({
-    mutationFn: () => createWorkspaceProject(projectDraft, commandKey("project")),
-    onSuccess: () => {
+    mutationFn: () => {
+      if (projectDraft.workflowTemplateId === "") throw new Error("Publish and select the workflow version first.");
+      projectAttempt.current ??= { command: structuredClone(projectDraft), key: commandKey("project") };
+      setProjectUnconfirmed(true);
+      return createWorkspaceProject(projectAttempt.current.command, projectAttempt.current.key);
+    },
+    onSuccess: (project) => {
+      projectAttempt.current = null;
+      setProjectUnconfirmed(false);
+      setSelectedProjectId(project.id);
+      setPickerEpoch((value) => value + 1);
       setProjectDraft({ name: "", key: "", description: "", sprintName: "", sprintGoal: "" });
       void refreshOverview();
+    },
+    onError: (error) => {
+      if (error instanceof ApiProblemError && [400, 401, 403, 409].includes(error.status)) { projectAttempt.current = null; setProjectUnconfirmed(false); }
     }
   });
   const updateWip = useMutation({
@@ -69,8 +88,10 @@ export function WorkspaceOperations() {
   };
   const submitProject = (event: FormEvent) => {
     event.preventDefault();
-    if (canAdmin && !createProject.isPending) createProject.mutate();
+    if (canAdmin && !createProject.isPending && projectDraft.workflowTemplateId !== "") createProject.mutate();
   };
+  const projectLocked = !canAdmin || createProject.isPending || projectUnconfirmed;
+  const selectedProject = overview.data?.projects.find((project) => project.id === selectedProjectId);
 
   return (
     <section id="operations" className="rounded border border-line bg-panel shadow-[var(--shadow-soft)]" aria-labelledby="operations-title">
@@ -102,6 +123,7 @@ export function WorkspaceOperations() {
                     <span className="rounded bg-foreground px-2 py-1 font-mono text-xs font-black text-background">{project.key}</span>
                     <h3 className="font-black">{project.name}</h3>
                   </div>
+                  {project.workflowTemplateId && <p className="mt-2 font-mono text-xs text-accent-strong">Synthetic customer workflow · pinned template revision</p>}
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">{project.description}</p>
                 </div>
                 <div className="border-l-2 border-accent pl-3 text-right">
@@ -109,6 +131,8 @@ export function WorkspaceOperations() {
                   <p className="mt-1 font-bold">{project.activeSprint?.name ?? "Not scheduled"}</p>
                 </div>
               </div>
+
+              <button type="button" className="focus-ring mt-3 min-h-10 rounded border border-line px-3 text-xs font-black" onClick={() => setSelectedProjectId(selectedProjectId === project.id ? null : project.id)}>{selectedProjectId === project.id ? "Close workflow" : `Open workflow ${project.key}`}</button>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {project.columns.map((column) => (
@@ -150,16 +174,18 @@ export function WorkspaceOperations() {
 
           <form onSubmit={submitProject} className="bg-panel p-4" aria-label="Create project and sprint">
             <div className="flex items-center gap-2"><Boxes size={17} /><h3 className="font-black">New delivery stream</h3></div>
+            <WorkflowTemplatePicker key={pickerEpoch} value={projectDraft.workflowTemplateId} disabled={projectLocked} onChange={(workflowTemplateId) => setProjectDraft((current) => ({ ...current, workflowTemplateId }))} />
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Project name" value={projectDraft.name} onChange={(name) => setProjectDraft((current) => ({ ...current, name }))} required />
-              <Field label="Project key" value={projectDraft.key} onChange={(key) => setProjectDraft((current) => ({ ...current, key }))} required pattern="[A-Za-z][A-Za-z0-9]{1,11}" />
-              <Field label="Sprint name" value={projectDraft.sprintName} onChange={(sprintName) => setProjectDraft((current) => ({ ...current, sprintName }))} required />
-              <Field label="Description" value={projectDraft.description} onChange={(description) => setProjectDraft((current) => ({ ...current, description }))} required />
-              <Field label="Sprint goal" value={projectDraft.sprintGoal} onChange={(sprintGoal) => setProjectDraft((current) => ({ ...current, sprintGoal }))} required />
-              <button disabled={!canAdmin || createProject.isPending} className="focus-ring mt-5 flex h-10 items-center justify-center gap-2 rounded bg-foreground px-4 text-sm font-black text-background">
+              <Field label="Project name" value={projectDraft.name} onChange={(name) => setProjectDraft((current) => ({ ...current, name }))} disabled={projectLocked} required />
+              <Field label="Project key" value={projectDraft.key} onChange={(key) => setProjectDraft((current) => ({ ...current, key }))} disabled={projectLocked} required pattern="[A-Za-z][A-Za-z0-9]{1,11}" />
+              <Field label="Sprint name" value={projectDraft.sprintName} onChange={(sprintName) => setProjectDraft((current) => ({ ...current, sprintName }))} disabled={projectLocked} required />
+              <Field label="Description" value={projectDraft.description} onChange={(description) => setProjectDraft((current) => ({ ...current, description }))} disabled={projectLocked} required />
+              <Field label="Sprint goal" value={projectDraft.sprintGoal} onChange={(sprintGoal) => setProjectDraft((current) => ({ ...current, sprintGoal }))} disabled={projectLocked} required />
+              <button disabled={!canAdmin || createProject.isPending || projectDraft.workflowTemplateId === ""} className="focus-ring mt-5 flex h-10 items-center justify-center gap-2 rounded bg-foreground px-4 text-sm font-black text-background">
                 {createProject.isPending ? <Loader2 className="animate-spin" size={16} /> : <Boxes size={16} />} Create stream
               </button>
             </div>
+            {createProject.error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-200">{createProject.error.message}{projectUnconfirmed ? " Outcome unconfirmed. Retry keeps the same saved form/key; do not reload or create another project until resolved." : " Review the fields and try again."}</p>}
           </form>
         </div>
 
@@ -193,6 +219,7 @@ export function WorkspaceOperations() {
           </ul>
         </div>
       </div>
+      {selectedProject && <div className="p-4"><ProjectWorkflowBoard key={selectedProject.id} project={selectedProject} members={overview.data?.members ?? []} /></div>}
     </section>
   );
 }

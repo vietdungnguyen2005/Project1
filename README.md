@@ -1,5 +1,11 @@
 # V-Core
 
+## Synthetic customer workflow delivery
+
+The feature branch adds workspace-scoped, immutable workflow template revisions for two **hypothetical** clients: software delivery (BACKLOG → IN_PROGRESS → REVIEW → DONE) and business operations (RECEIVED → VALIDATION → APPROVAL → COMPLETED). An administrator previews/publishes/selects a revision, provisions a project atomically, and uses the existing task commands through a customer workflow workbench. Omitting the template retains default project creation. Existing projects are never silently remapped.
+
+This is local portfolio implementation/testing evidence, not a real customer engagement or production deployment. Start with [discovery](docs/fde/client-discovery.md), [capability inventory and plan](docs/fde/requirements-matrix.md), [API/design](docs/fde/solution-design.md), [acceptance evidence](docs/fde/acceptance-tests.md), [handoff](docs/fde/deployment-handoff.md) and the [90-second demo/interview/CV wording](docs/fde/customer-demo-script.md). Run the real Worker/Java/DB acceptance after package/build with `pwsh -NoProfile -File tools/verify-operator-session.ps1`; it creates and removes disposable local containers. No platform keys or deployment are required.
+
 ### Dependency audit policy (2026-10-18)
 
 Run `npm run audit:dependencies`. Runtime dependencies retain a strict high/critical audit. The full audit uses `audit-ci.json` with one user-approved, exact advisory-and-lint-path exception for GHSA-vfj7-8cjw-p6xm (unpatched braces stack exhaustion), expiring at 00:00 Asia/Bangkok on 2026-11-18. This is accepted risk, not a vulnerability fix or a zero-findings claim. Lint only trusted repository configuration; do not feed untrusted root-directory glob patterns into the lint tool. All other high/critical findings and audit-service failures still block CI. Remove the exception when upstream is patched; do not renew automatically.

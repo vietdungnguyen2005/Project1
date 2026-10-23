@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCloudTask,
+  createProjectTask,
   toActivityItem,
   toCreateTaskCommand,
   toMoveTaskCommand
@@ -9,6 +10,15 @@ import type { Task, TaskDraft } from "@/lib/types";
 import { mergeTaskMoveResult } from "@/lib/task-sync";
 
 describe("task API contract", () => {
+  it("creates a task in an explicit project's actual column, not the seeded board", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "task-id", columnId: "actual-column" }, { status: 201 }));
+    fetchMock.mockResolvedValueOnce(Response.json({ authenticated: true, roles: ["ROLE_OPERATOR"], csrfToken: "test-csrf" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await createProjectTask("customer-project", "actual-column", " Synthetic task ", "task-operation");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/workspaces/00000000-0000-0000-0000-000000000100/projects/customer-project/tasks");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ title: "Synthetic task", columnId: "actual-column" });
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get("Idempotency-Key")).toBe("task-operation");
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });

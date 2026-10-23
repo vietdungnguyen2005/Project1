@@ -47,6 +47,7 @@ try {
     $env:TEST_OPERATOR_PASSWORD = 'qa-session-password'
     $env:BACKEND_ORIGIN = 'http://127.0.0.1:18081'
     $env:BASE_URL = 'http://127.0.0.1:13001'
+    $env:TEST_POSTGRES_CONTAINER = $qaPostgres
     $qaBackend = Start-Process -FilePath 'java' -ArgumentList '-jar','backend/target/v-core-backend-0.1.0-SNAPSHOT.jar','--server.port=18081','--vcore.sse.heartbeat-interval=250' -WorkingDirectory $qaRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $qaOutput 'backend.log') -RedirectStandardError (Join-Path $qaOutput 'backend-error.log')
     Wait-QaHttp 'http://127.0.0.1:18081/actuator/health' $qaBackend
     $qaFrontend = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c','node node_modules/wrangler/bin/wrangler.js pages dev out --ip 127.0.0.1 --port 13001 --inspector-port 19231 --binding BACKEND_ORIGIN=http://127.0.0.1:18081 --binding BFF_SHARED_SECRET=qa-bff-session-only' -WorkingDirectory $qaRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $qaOutput 'frontend.log') -RedirectStandardError (Join-Path $qaOutput 'frontend-error.log')

@@ -11,6 +11,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    @ExceptionHandler(dev.vcore.workspace.application.InvalidWorkflowTemplateException.class)
+    ProblemDetail invalidTemplate(dev.vcore.workspace.application.InvalidWorkflowTemplateException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid workflow template", exception.getMessage());
+    }
+
     @ExceptionHandler({ApiConflictException.class, OptimisticLockingFailureException.class})
     ProblemDetail conflict(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Conflict", exception.getMessage());

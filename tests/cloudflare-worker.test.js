@@ -2,6 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../public/_worker.js";
 
 describe("Cloudflare BFF", () => {
+  it("exposes scoped template GET/POST but not DELETE and preserves the operation key", async () => {
+    const upstream = vi.fn().mockResolvedValue(Response.json({ id: "template" }, { status: 201 }));
+    vi.stubGlobal("fetch", upstream);
+    const url = "https://v-core.pages.dev/api/workspaces/00000000-0000-0000-0000-000000000100/workflow-templates";
+    const env = { BACKEND_ORIGIN: "https://api.example.com", BFF_SHARED_SECRET: "trusted-key", ASSETS: { fetch: vi.fn() } };
+    expect((await worker.fetch(new Request(url, { method: "POST", headers: { "Idempotency-Key": "template-operation", "X-CSRF-TOKEN": "csrf" }, body: "{}" }), env)).status).toBe(201);
+    expect(new Headers(upstream.mock.calls[0][1].headers).get("Idempotency-Key")).toBe("template-operation");
+    expect((await worker.fetch(new Request(url, { method: "DELETE" }), env)).status).toBe(405);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
   it("does not forward unsafe methods on read-only paths, including with query strings", async () => {
     const backendFetch = vi.fn();
     vi.stubGlobal("fetch", backendFetch);

@@ -1,8 +1,8 @@
 import { operatorFetch } from "@/lib/operator-session";
 import { DEMO_PROJECT_ID, DEMO_WORKSPACE_ID } from "@/lib/vcore-config";
 
-const taskUrl = (taskId: string) =>
-  `/api/workspaces/${DEMO_WORKSPACE_ID}/projects/${DEMO_PROJECT_ID}/tasks/${encodeURIComponent(taskId)}`;
+const taskUrl = (taskId: string, projectId = DEMO_PROJECT_ID) =>
+  `/api/workspaces/${DEMO_WORKSPACE_ID}/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`;
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -29,9 +29,10 @@ export async function assignTaskMember(
   taskId: string,
   assigneeId: string,
   expectedVersion: number,
-  idempotencyKey: string
+  idempotencyKey: string,
+  projectId = DEMO_PROJECT_ID
 ) {
-  const response = await operatorFetch(`${taskUrl(taskId)}/assignee`, {
+  const response = await operatorFetch(`${taskUrl(taskId, projectId)}/assignee`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",

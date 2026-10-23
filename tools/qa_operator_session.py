@@ -4,6 +4,7 @@ import time
 from urllib.request import Request, urlopen
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
+from qa_customer_workflow import verify_customer_workflows
 
 base = os.environ["BASE_URL"]
 output = Path("backend/target/operator-browser")
@@ -42,6 +43,7 @@ with sync_playwright() as p:
         cookie = next(c for c in context.cookies() if c["name"] == "VCORE_SESSION")
         assert cookie["httpOnly"] and cookie["sameSite"] == "Lax"
         assert context.request.post(target, data={}).status == 403
+        verify_customer_workflows(page, context, base)
         page.get_by_role("button", name="Create task", exact=True).click()
         form = page.get_by_role("form", name="Task composer")
         form.get_by_role("textbox", name="Title", exact=True).fill("Real authenticated browser evidence")

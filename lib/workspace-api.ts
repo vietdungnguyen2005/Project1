@@ -1,4 +1,5 @@
 import { operatorFetch } from "@/lib/operator-session";
+import { ApiProblemError } from "@/lib/task-api";
 import { DEMO_WORKSPACE_ID } from "@/lib/vcore-config";
 
 export type WorkspaceMember = {
@@ -37,6 +38,7 @@ export type WorkspaceProject = {
     status: "ACTIVE";
   } | null;
   columns: WorkflowColumn[];
+  workflowTemplateId?: string | null;
 };
 
 export type WorkspaceOverview = {
@@ -51,11 +53,37 @@ export type CreateProjectCommand = {
   description: string;
   sprintName: string;
   sprintGoal: string;
+  workflowTemplateId?: string;
 };
+
+export type WorkflowDefinition = {
+  key: string;
+  version: number;
+  name: string;
+  scenario: "CLIENT_A" | "CLIENT_B" | "CUSTOM";
+  columns: Array<Pick<WorkflowColumn, "name" | "category" | "position" | "wipLimit">>;
+};
+
+export type WorkflowTemplate = WorkflowDefinition & { id: string; synthetic: true };
+
+export async function fetchWorkflowPresets(signal?: AbortSignal) {
+  return parseJson<WorkflowDefinition[]>(await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/workflow-presets`, { signal }));
+}
+
+export async function fetchWorkflowTemplates(signal?: AbortSignal) {
+  return parseJson<WorkflowTemplate[]>(await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/workflow-templates`, { signal }));
+}
+
+export async function publishWorkflowTemplate(definition: WorkflowDefinition, key: string) {
+  return parseJson<WorkflowTemplate>(await operatorFetch(`/api/workspaces/${DEMO_WORKSPACE_ID}/workflow-templates`, {
+    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(definition)
+  }));
+}
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(`Workspace API failed with ${response.status}`);
+    const problem = await response.json().catch(() => ({}));
+    throw new ApiProblemError(response.status, problem);
   }
   return response.json() as Promise<T>;
 }
